@@ -22,7 +22,7 @@ class MultiAgentEnv(BaseEnv):
         return self._create_observation(), self._create_info()
     
     def reset_with_input(self, agent_input: Dict[str, Any]) -> Tuple[Dict, Dict]:
-        """Reset with input from previous agents in the workflow"""
+        """Reset with input from previous agents in the Chain of Experts"""
         self.multi_agent_context = agent_input
         
         # Process input from previous agents
@@ -38,7 +38,7 @@ class MultiAgentEnv(BaseEnv):
         self.current_agent_id = agent_id
     
     def _process_multi_agent_input(self, agent_input: Dict[str, Any]):
-        """Process input from previous agents"""
+        """Process input from previous agents in the chain"""
         # Store previous agent outputs
         for source_agent, agent_output in agent_input.items():
             if isinstance(agent_output, dict) and "response" in agent_output:
@@ -47,10 +47,6 @@ class MultiAgentEnv(BaseEnv):
                     "response": agent_output["response"],
                     "timestamp": agent_output.get("timestamp", None)
                 })
-        
-        # Handle debate context if present
-        if "debate_context" in agent_input:
-            self.multi_agent_context["debate"] = agent_input["debate_context"]
     
     @abstractmethod
     def _create_observation(self) -> Dict[str, Any]:
@@ -63,22 +59,18 @@ class MultiAgentEnv(BaseEnv):
         pass
     
     def _create_observation_with_context(self) -> Dict[str, Any]:
-        """Create observation with multi-agent context"""
+        """Create observation with Chain of Experts context"""
         base_obs = self._create_observation()
         
-        # Add multi-agent context to observation
+        # Add Chain of Experts context to observation
         if self.agent_history:
             base_obs["previous_agents"] = self.agent_history
             base_obs["collaboration_prompt"] = self._format_collaboration_prompt()
         
-        if "debate" in self.multi_agent_context:
-            base_obs["debate_context"] = self.multi_agent_context["debate"]
-            base_obs["debate_prompt"] = self._format_debate_prompt()
-        
         return base_obs
     
     def _create_info_with_context(self) -> Dict[str, Any]:
-        """Create info with multi-agent context"""
+        """Create info with Chain of Experts context"""
         base_info = self._create_info()
         base_info["multi_agent_mode"] = True
         base_info["current_agent"] = self.current_agent_id
@@ -86,38 +78,20 @@ class MultiAgentEnv(BaseEnv):
         return base_info
     
     def _format_collaboration_prompt(self) -> str:
-        """Format a prompt including previous agent responses"""
+        """Format a prompt including previous agent responses in the chain"""
         if not self.agent_history:
             return ""
         
-        prompt = "Previous agent responses:\n\n"
+        prompt = "Previous agent responses in the Chain of Experts:\n\n"
         for i, agent_data in enumerate(self.agent_history):
             prompt += f"Agent {agent_data['agent_id']}:\n{agent_data['response']}\n\n"
         
         prompt += "Please consider the above responses and provide your analysis or solution:"
         return prompt
-    
-    def _format_debate_prompt(self) -> str:
-        """Format a prompt for debate scenarios"""
-        debate_ctx = self.multi_agent_context.get("debate", {})
-        round_num = debate_ctx.get("round", 0)
-        
-        prompt = f"Debate Round {round_num + 1}:\n\n"
-        
-        # Add previous rounds if any
-        previous_rounds = debate_ctx.get("previous_rounds", [])
-        for round_data in previous_rounds:
-            prompt += f"Round {round_data['round'] + 1} responses:\n"
-            for agent_id, output in round_data["outputs"].items():
-                prompt += f"  {agent_id}: {output.get('response', '')}\n"
-            prompt += "\n"
-        
-        prompt += "Please provide your response for this debate round, considering the previous arguments:"
-        return prompt
 
 
 class MathMultiAgentEnv(MultiAgentEnv):
-    """Multi-agent environment for math problems"""
+    """Multi-agent environment for math problems in Chain of Experts"""
     
     def __init__(self, problem: str = "", solution: str = "", **kwargs):
         super().__init__(**kwargs)
@@ -184,7 +158,7 @@ class MathMultiAgentEnv(MultiAgentEnv):
 
 
 class CodeMultiAgentEnv(MultiAgentEnv):
-    """Multi-agent environment for coding problems"""
+    """Multi-agent environment for coding problems in Chain of Experts"""
     
     def __init__(self, problem_description: str = "", test_cases: List[Dict] = None, **kwargs):
         super().__init__(**kwargs)
@@ -250,72 +224,5 @@ class CodeMultiAgentEnv(MultiAgentEnv):
         return CodeMultiAgentEnv(
             problem_description=info.get("problem", ""),
             test_cases=info.get("test_cases", []),
-            task_data=info
-        )
-
-
-class DebateEnv(MultiAgentEnv):
-    """Environment specifically designed for multi-agent debates"""
-    
-    def __init__(self, topic: str = "", position_options: List[str] = None, **kwargs):
-        super().__init__(**kwargs)
-        self.topic = topic
-        self.position_options = position_options or ["For", "Against"]
-        self.round_number = 0
-        self.agent_positions = {}
-    
-    def _create_observation(self) -> Dict[str, Any]:
-        return {
-            "topic": self.topic,
-            "position_options": self.position_options,
-            "round": self.round_number,
-            "type": "debate"
-        }
-    
-    def _create_info(self) -> Dict[str, Any]:
-        return {
-            "topic": self.topic,
-            "round": self.round_number,
-            "agent_positions": self.agent_positions
-        }
-    
-    def step(self, action: Any) -> Tuple[Any, float, bool, Dict]:
-        """Take a step in the debate environment"""
-        response = str(action)
-        
-        # Record agent position if this is a position-taking response
-        if self.current_agent_id and any(pos in response for pos in self.position_options):
-            for pos in self.position_options:
-                if pos.lower() in response.lower():
-                    self.agent_positions[self.current_agent_id] = pos
-                    break
-        
-        self.round_number += 1
-        
-        # Simple reward for engagement (more sophisticated scoring would analyze argument quality)
-        reward = 0.5 if len(response) > 50 else 0.2
-        
-        # Debate continues until explicitly ended
-        done = False
-        
-        next_obs = {
-            "topic": self.topic,
-            "round": self.round_number,
-            "latest_response": response
-        }
-        
-        info = {
-            "round": self.round_number,
-            "agent_positions": self.agent_positions,
-            "response_length": len(response)
-        }
-        
-        return next_obs, reward, done, info
-    
-    @staticmethod
-    def from_dict(info: Dict) -> "DebateEnv":
-        return DebateEnv(
-            topic=info.get("topic", ""),
-            position_options=info.get("position_options", ["For", "Against"]),
             task_data=info
         ) 

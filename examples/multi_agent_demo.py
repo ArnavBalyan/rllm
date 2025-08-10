@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Multi-Agent RL Training Demo
+Chain of Experts RL Training Demo
 
-This script demonstrates how to use the multi-agent extension for rLLM.
-It shows examples of:
-1. Chain of Experts (CoE) - Sequential agent execution
-2. Mixture of Experts (MoE) - Parallel agent execution with aggregation  
-3. Multi-Agent Debate - Agents discuss and collaborate
+This script demonstrates how to use the Chain of Experts (CoE) extension for rLLM.
+Chain of Experts enables sequential agent execution where:
+- Agent A processes the initial problem
+- Agent B receives Agent A's output as context and refines it  
+- Agent C receives Agent B's output and provides final solution
+- Each agent can use specialized models via separate vLLM instances
 """
 
 import asyncio
@@ -23,8 +24,6 @@ from rllm.engine.multi_agent_execution_engine import (
     AgentConfig,
     AgentRole,
     ChainOfExpertsWorkflow,
-    MixtureOfExpertsWorkflow,
-    DebateWorkflow,
     MultiAgentExecutionEngine,
 )
 from rllm.agents.multi_agent import (
@@ -34,15 +33,9 @@ from rllm.agents.multi_agent import (
     MathExpertAgent,
     CodeExpertAgent,
     ReasoningExpertAgent,
-    AggregatorAgent,
-    DebaterAgent,
 )
-from rllm.environments.multi_agent_env import MathMultiAgentEnv, DebateEnv
-from rllm.trainer.verl.multi_agent_ppo_trainer import (
-    create_chain_of_experts_trainer,
-    create_mixture_of_experts_trainer,
-    create_debate_trainer,
-)
+from rllm.environments.multi_agent_env import MathMultiAgentEnv
+from rllm.trainer.verl.multi_agent_ppo_trainer import create_chain_of_experts_trainer
 
 
 def create_demo_tokenizer():
@@ -67,40 +60,46 @@ def create_demo_tokenizer():
         return MockTokenizer()
 
 
-# Example 1: Chain of Experts for Math Problems
 def demo_chain_of_experts():
     """Demonstrate Chain of Experts workflow for math problems"""
     print("\n=== CHAIN OF EXPERTS DEMO ===")
+    print("Sequential execution: Proposer → Math Expert → Critic → Judge")
     
-    # Configure agents
+    # Configure agents in chain order
     agent_configs = [
         AgentConfig(
             agent_id="proposer",
             agent_class=ProposerAgent,
             role=AgentRole.PROPOSER,
-            agent_args={"agent_id": "proposer"}
+            agent_args={"agent_id": "proposer"},
+            model_path="models/proposer_model",  # Optional: specialized model
+            temperature=0.8,  # Creative for initial proposals
         ),
         AgentConfig(
             agent_id="math_expert",
             agent_class=MathExpertAgent,
             role=AgentRole.SPECIALIST,
-            agent_args={"agent_id": "math_expert", "specialty": "Mathematics"}
+            agent_args={"agent_id": "math_expert", "specialty": "Mathematics"},
+            model_path="models/math_expert_model",  # Optional: math-specialized model
+            temperature=0.3,  # Lower temp for precise calculations
         ),
         AgentConfig(
             agent_id="critic",
             agent_class=CriticAgent,
             role=AgentRole.CRITIC,
-            agent_args={"agent_id": "critic"}
+            agent_args={"agent_id": "critic"},
+            temperature=0.5,  # Balanced for analysis
         ),
         AgentConfig(
             agent_id="judge",
             agent_class=JudgeAgent,
             role=AgentRole.JUDGE,
-            agent_args={"agent_id": "judge"}
+            agent_args={"agent_id": "judge"},
+            temperature=0.2,  # Low temp for final decisions
         ),
     ]
     
-    # Create workflow
+    # Create Chain of Experts workflow
     workflow = ChainOfExpertsWorkflow(agent_configs)
     
     # Create execution engine
@@ -122,248 +121,243 @@ def demo_chain_of_experts():
         }
     ]
     
-    print(f"Running Chain of Experts on task: {tasks[0]['problem']}")
+    print(f"\nTask: {tasks[0]['problem']}")
     print(f"Expected solution: {tasks[0]['solution']}")
     
-    # Run async execution (in real scenario)
-    async def run_coe():
-        results = await engine.execute_multi_agent_workflows(tasks)
-        return results
+    print("\nChain of Experts execution flow:")
+    print("Step 0: Proposer analyzes the problem and proposes initial approach")
+    print("Step 1: Math Expert receives Proposer's output and applies mathematical knowledge")
+    print("Step 2: Critic receives Math Expert's output and reviews for errors")  
+    print("Step 3: Judge receives Critic's output and makes final decision")
     
-    # For demo, we'll simulate the execution
-    print("Chain of Experts workflow would execute:")
-    print("1. Proposer: Analyzes the problem and proposes initial approach")
-    print("2. Math Expert: Applies mathematical knowledge to solve")
-    print("3. Critic: Reviews the solution for errors")  
-    print("4. Judge: Makes final decision on the answer")
+    # Actual execution would be:
+    # results = await engine.execute_multi_agent_workflows(tasks)
     
     return workflow, engine
 
 
-# Example 2: Mixture of Experts for Complex Problems
-def demo_mixture_of_experts():
-    """Demonstrate Mixture of Experts workflow"""
-    print("\n=== MIXTURE OF EXPERTS DEMO ===")
-    
-    # Configure expert agents
-    expert_configs = [
-        AgentConfig(
-            agent_id="math_expert",
-            agent_class=MathExpertAgent,
-            role=AgentRole.SPECIALIST,
-            agent_args={"agent_id": "math_expert", "specialty": "Mathematics"}
-        ),
-        AgentConfig(
-            agent_id="code_expert",
-            agent_class=CodeExpertAgent,
-            role=AgentRole.SPECIALIST,
-            agent_args={"agent_id": "code_expert", "specialty": "Programming"}
-        ),
-        AgentConfig(
-            agent_id="reasoning_expert",
-            agent_class=ReasoningExpertAgent,
-            role=AgentRole.SPECIALIST,
-            agent_args={"agent_id": "reasoning_expert", "specialty": "Logic"}
-        ),
-    ]
-    
-    # Configure aggregator
-    aggregator_config = AgentConfig(
-        agent_id="aggregator",
-        agent_class=AggregatorAgent,
-        role=AgentRole.AGGREGATOR,
-        agent_args={"agent_id": "aggregator"}
-    )
-    
-    # Create workflow
-    workflow = MixtureOfExpertsWorkflow(expert_configs, aggregator_config)
-    
-    # Create execution engine
-    tokenizer = create_demo_tokenizer()
-    engine = MultiAgentExecutionEngine(
-        workflow=workflow,
-        env_class=MathMultiAgentEnv,
-        env_args={},
-        engine_name="openai",
-        tokenizer=tokenizer,
-        n_parallel_workflows=1,
-    )
-    
-    print("Mixture of Experts workflow would execute:")
-    print("1. All experts work in parallel on the same problem")
-    print("2. Math Expert: Focuses on mathematical aspects")
-    print("3. Code Expert: Considers algorithmic approaches")
-    print("4. Reasoning Expert: Analyzes logical structure")
-    print("5. Aggregator: Combines all expert opinions into final answer")
-    
-    return workflow, engine
-
-
-# Example 3: Multi-Agent Debate
-def demo_multi_agent_debate():
-    """Demonstrate Multi-Agent Debate workflow"""
-    print("\n=== MULTI-AGENT DEBATE DEMO ===")
-    
-    # Configure debater agents
-    debater_configs = [
-        AgentConfig(
-            agent_id="debater_for",
-            agent_class=DebaterAgent,
-            role=AgentRole.SPECIALIST,
-            agent_args={"agent_id": "debater_for", "position": "For"}
-        ),
-        AgentConfig(
-            agent_id="debater_against",
-            agent_class=DebaterAgent,
-            role=AgentRole.SPECIALIST,
-            agent_args={"agent_id": "debater_against", "position": "Against"}
-        ),
-        AgentConfig(
-            agent_id="moderator",
-            agent_class=ReasoningExpertAgent,
-            role=AgentRole.SPECIALIST,
-            agent_args={"agent_id": "moderator", "specialty": "Moderation"}
-        ),
-    ]
-    
-    # Configure judge
-    judge_config = AgentConfig(
-        agent_id="judge",
-        agent_class=JudgeAgent,
-        role=AgentRole.JUDGE,
-        agent_args={"agent_id": "judge"}
-    )
-    
-    # Create workflow
-    workflow = DebateWorkflow(debater_configs, judge_config, max_rounds=3)
-    
-    # Create execution engine
-    tokenizer = create_demo_tokenizer()
-    engine = MultiAgentExecutionEngine(
-        workflow=workflow,
-        env_class=DebateEnv,
-        env_args={},
-        engine_name="openai",
-        tokenizer=tokenizer,
-        n_parallel_workflows=1,
-    )
-    
-    print("Multi-Agent Debate workflow would execute:")
-    print("1. Round 1: Each debater presents initial position")
-    print("2. Round 2: Debaters respond to each other's arguments")
-    print("3. Round 3: Final arguments and rebuttals")
-    print("4. Judge: Evaluates all arguments and reaches conclusion")
-    
-    return workflow, engine
-
-
-# Training Integration Demo
-def demo_training_integration():
-    """Show how to integrate multi-agent workflows with training"""
-    print("\n=== TRAINING INTEGRATION DEMO ===")
-    
-    print("To integrate with training, you would:")
-    print("1. Create your base AgentPPOTrainer")
-    print("2. Use factory functions to wrap it with multi-agent capabilities")
-    print("3. Call fit_multi_agent() instead of fit_agent()")
+def demo_chain_architecture():
+    """Explain the Chain of Experts architecture"""
+    print("\n=== CHAIN OF EXPERTS ARCHITECTURE ===")
     
     print("""
-Example code:
+Chain of Experts Architecture Integration with rLLM:
 
-# Create base trainer (using your existing setup)
+┌─────────────────────────────────────────────────────────────────┐
+│                    Chain of Experts Workflow                    │
+├─────────────────────────────────────────────────────────────────┤
+│  Step 0: [Proposer Agent]     ──→ Router ──→ vLLM Instance 1   │
+│     ↓ (output as context)                                      │
+│  Step 1: [Math Expert Agent]  ──→ Router ──→ vLLM Instance 2   │
+│     ↓ (output as context)                                      │
+│  Step 2: [Critic Agent]       ──→ Router ──→ vLLM Instance 3   │
+│     ↓ (output as context)                                      │
+│  Step 3: [Judge Agent]        ──→ Router ──→ vLLM Instance 4   │
+│                                                                 │
+│  MultiAgentPPOTrainer integrates with verl for distributed     │
+│  training across all agent instances                           │
+└─────────────────────────────────────────────────────────────────┘
+
+Key Architecture Points:
+
+1. WorkflowStep Definition:
+   - Each step contains exactly one agent for Chain of Experts
+   - Steps execute sequentially, not in parallel
+   - Each step can have different execution modes (currently "sequential")
+
+2. vLLM Sharding Options:
+   - Option A: Each agent gets its own specialized model/vLLM instance
+   - Option B: All agents share the same base model with role conditioning
+   - Router handles load balancing and GPU distribution
+
+3. Context Passing:
+   - MultiAgentEnv.reset_with_input() passes previous agent output
+   - Environment formats collaboration prompts automatically
+   - Agent receives context through observation in chat_completions
+
+4. Async Integration:
+   - Uses existing rLLM async infrastructure
+   - Each agent has its own AgentExecutionEngine
+   - Workflows can run in parallel while agents within workflow run sequentially
+
+5. Training Integration:
+   - "final_agent" mode: train only the last agent in chain
+   - "unified" mode: train on combined trajectory from all agents
+   - Reward aggregation: use final agent reward or average across chain
+""")
+
+
+def demo_training_integration():
+    """Show how to integrate Chain of Experts with training"""
+    print("\n=== TRAINING INTEGRATION DEMO ===")
+    
+    print("To integrate Chain of Experts with training:")
+    print("1. Create your base AgentPPOTrainer (existing setup)")
+    print("2. Define agent configs in chain order")
+    print("3. Use create_chain_of_experts_trainer() factory function")
+    print("4. Call fit_multi_agent() instead of fit_agent()")
+    
+    print("""
+Example integration code:
+
+# Step 1: Create base trainer (your existing setup)
 base_trainer = AgentPPOTrainer(
     config=your_config,
     tokenizer=your_tokenizer,
+    role_worker_mapping=your_role_mapping,
+    resource_pool_manager=your_resource_manager,
     # ... other parameters
 )
 
-# Create multi-agent workflow
+# Step 2: Define Chain of Experts agents
 agent_configs = [
-    AgentConfig(agent_id="expert1", agent_class=MathExpertAgent, ...),
-    AgentConfig(agent_id="expert2", agent_class=CodeExpertAgent, ...),
+    AgentConfig(
+        agent_id="proposer", 
+        agent_class=ProposerAgent,
+        model_path="models/proposer_model",  # Optional: specialized model
+        temperature=0.8
+    ),
+    AgentConfig(
+        agent_id="expert", 
+        agent_class=MathExpertAgent,
+        model_path="models/math_model",  # Optional: math-specialized model  
+        temperature=0.3
+    ),
+    AgentConfig(
+        agent_id="judge", 
+        agent_class=JudgeAgent,
+        temperature=0.2
+    ),
 ]
 
-# Wrap with multi-agent capabilities
-multi_agent_trainer = create_chain_of_experts_trainer(
+# Step 3: Wrap with Chain of Experts capabilities
+chain_trainer = create_chain_of_experts_trainer(
     base_trainer=base_trainer,
     agent_configs=agent_configs,
-    training_mode="unified",  # or "final_agent", "individual"
-    reward_aggregation="final_agent"  # or "average", "weighted"
+    training_mode="final_agent",  # or "unified"
+    reward_aggregation="final_agent"  # or "average"
 )
 
-# Train the multi-agent system
-multi_agent_trainer.fit_multi_agent()
+# Step 4: Train the Chain of Experts system
+chain_trainer.fit_multi_agent()
+
+Training Modes:
+- "final_agent": Only train the final agent (Judge) using Chain context
+- "unified": Train on combined trajectory from all agents in chain
+
+Reward Aggregation:
+- "final_agent": Use reward from final agent in chain
+- "average": Average rewards across all agents in chain
 """)
 
 
-# Advanced Workflows Demo
-def demo_custom_workflow():
-    """Show how to create custom workflows"""
-    print("\n=== CUSTOM WORKFLOW DEMO ===")
+def demo_custom_agents():
+    """Show how to create custom agents for Chain of Experts"""
+    print("\n=== CUSTOM AGENTS DEMO ===")
     
-    print("You can create custom workflows by extending BaseWorkflow:")
+    print("Creating custom agents for specific Chain of Experts roles:")
     print("""
-from rllm.engine.multi_agent_execution_engine import BaseWorkflow
+from rllm.agents.multi_agent import MultiAgentBase
+from rllm.engine.multi_agent_execution_engine import AgentRole
 
-class CustomWorkflow(BaseWorkflow):
-    def __init__(self, config):
-        super().__init__("custom_workflow")
-        self.config = config
+class CustomReviewerAgent(MultiAgentBase):
+    def __init__(self, **kwargs):
+        system_prompt = '''You are a Reviewer Agent in a Chain of Experts.
+        Your role is to:
+        1. Review the work from the previous agent in the chain
+        2. Identify any issues or improvements needed
+        3. Provide specific feedback and corrections
+        4. Prepare refined output for the next agent
+        
+        Consider the previous agent's work carefully and build upon it.'''
+        
+        super().__init__(
+            role=AgentRole.CRITIC, 
+            system_prompt=system_prompt, 
+            **kwargs
+        )
     
-    def define_workflow(self):
-        # Define your agents, steps, and connections
-        agents = [...]
-        steps = [...]
-        connections = [...]
-        return agents, steps, connections
-    
-    def process_step_output(self, step_outputs):
-        # Custom processing logic
-        return processed_outputs
+    def _parse_action(self, response: str):
+        # Custom parsing logic if needed
+        return response
+
+# Usage in Chain of Experts
+agent_configs = [
+    AgentConfig("analyzer", AnalyzerAgent),
+    AgentConfig("reviewer", CustomReviewerAgent),  # Your custom agent
+    AgentConfig("finalizer", FinalizerAgent),
+]
 """)
 
 
-# Performance and Scaling Demo
-def demo_scaling():
-    """Discuss performance and scaling considerations"""
+def demo_scaling_considerations():
+    """Discuss scaling and performance considerations"""
     print("\n=== SCALING AND PERFORMANCE ===")
     
-    print("Key considerations for scaling multi-agent RL:")
-    print("1. GPU Memory: Each agent may need separate GPU instances")
-    print("2. Communication: Agents need to share context efficiently")
-    print("3. Load Balancing: Distribute work across available resources")
-    print("4. Async Execution: Use async patterns for better throughput")
-    print("5. Caching: Cache agent responses for repeated interactions")
-    
-    print("\nConfiguration options:")
-    print("- n_parallel_workflows: Number of concurrent workflows")
-    print("- training_mode: unified/final_agent/individual")
-    print("- reward_aggregation: How to combine rewards from multiple agents")
-    print("- async_engine: Enable asynchronous execution")
+    print("Key considerations for scaling Chain of Experts:")
+    print("""
+1. GPU Memory Distribution:
+   - Each agent can use separate GPU instances
+   - Specialized models for different roles (math, code, reasoning)
+   - Router handles load balancing across vLLM instances
+
+2. Sequential vs Parallel Execution:
+   - Agents within chain execute sequentially (by design)
+   - Multiple chains can execute in parallel (n_parallel_workflows)
+   - Async execution within each agent for better throughput
+
+3. Model Specialization Options:
+   - Option A: Different models per agent (Proposer, Expert, Critic, Judge)
+   - Option B: Same base model with different system prompts
+   - Option C: Hybrid approach with specialized models for key roles
+
+4. Context Management:
+   - Efficient passing of context between chain steps
+   - MultiAgentEnv handles context formatting automatically
+   - Configurable max_prompt_length per agent
+
+5. Training Efficiency:
+   - "final_agent" mode reduces training overhead
+   - "unified" mode captures full chain behavior
+   - Gradient accumulation across chain steps
+
+Configuration example:
+engine = MultiAgentExecutionEngine(
+    workflow=chain_workflow,
+    n_parallel_workflows=8,    # Parallel chains
+    trajectory_timeout=300,     # Per-chain timeout
+    max_workers=64,            # Thread pool size
+)
+""")
 
 
 def main():
-    """Run all demos"""
-    print("Multi-Agent RL System Demo")
+    """Run Chain of Experts demo"""
+    print("Chain of Experts RL System Demo")
     print("=" * 50)
     
     try:
-        # Run each demo
+        # Run each demo section
         demo_chain_of_experts()
-        demo_mixture_of_experts()
-        demo_multi_agent_debate()
+        demo_chain_architecture()
         demo_training_integration()
-        demo_custom_workflow()
-        demo_scaling()
+        demo_custom_agents()
+        demo_scaling_considerations()
         
         print("\n" + "=" * 50)
-        print("Demo completed successfully!")
+        print("Chain of Experts demo completed successfully!")
         print("\nNext steps:")
-        print("1. Set up your model and tokenizer")
+        print("1. Set up your models and tokenizer")
         print("2. Configure your environment and reward functions")
-        print("3. Create agent configurations for your use case")
-        print("4. Choose appropriate workflow type")
+        print("3. Create agent configurations in chain order")
+        print("4. Choose training mode (final_agent vs unified)")
         print("5. Run training with fit_multi_agent()")
+        print("\nKey benefits of Chain of Experts:")
+        print("- Sequential refinement of solutions")
+        print("- Specialized agents for different roles")
+        print("- Efficient context passing between agents")
+        print("- Flexible training modes and reward aggregation")
+        print("- Integration with existing rLLM infrastructure")
         
     except Exception as e:
         print(f"Demo error: {e}")

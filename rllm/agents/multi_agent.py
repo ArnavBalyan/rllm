@@ -5,7 +5,7 @@ from rllm.engine.multi_agent_execution_engine import AgentRole
 
 
 class MultiAgentBase(BaseAgent):
-    """Base class for agents that work in multi-agent workflows"""
+    """Base class for agents that work in Chain of Experts workflows"""
     
     def __init__(
         self, 
@@ -29,7 +29,7 @@ class MultiAgentBase(BaseAgent):
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
         
-        # Add multi-agent context if available
+        # Add Chain of Experts context if available
         if self.multi_agent_context:
             context_content = self._format_multi_agent_context()
             if context_content:
@@ -55,12 +55,10 @@ class MultiAgentBase(BaseAgent):
     
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
         """Update agent state from environment"""
-        # Extract multi-agent context if present
+        # Extract Chain of Experts context if present
         if isinstance(observation, dict):
             if "collaboration_prompt" in observation:
                 self.multi_agent_context["collaboration"] = observation["collaboration_prompt"]
-            if "debate_prompt" in observation:
-                self.multi_agent_context["debate"] = observation["debate_prompt"]
             if "previous_agents" in observation:
                 self.multi_agent_context["previous_agents"] = observation["previous_agents"]
         
@@ -91,18 +89,15 @@ class MultiAgentBase(BaseAgent):
         return self._trajectory.steps[-1] if self._trajectory.steps else None
     
     def _format_multi_agent_context(self) -> str:
-        """Format multi-agent context into a readable prompt"""
+        """Format Chain of Experts context into a readable prompt"""
         context_parts = []
         
         if "collaboration" in self.multi_agent_context:
-            context_parts.append(f"COLLABORATION CONTEXT:\n{self.multi_agent_context['collaboration']}")
-        
-        if "debate" in self.multi_agent_context:
-            context_parts.append(f"DEBATE CONTEXT:\n{self.multi_agent_context['debate']}")
+            context_parts.append(f"CHAIN OF EXPERTS CONTEXT:\n{self.multi_agent_context['collaboration']}")
         
         if "previous_agents" in self.multi_agent_context:
             agents_info = self.multi_agent_context["previous_agents"]
-            context_parts.append(f"PREVIOUS AGENTS: {len(agents_info)} agents have provided input")
+            context_parts.append(f"PREVIOUS AGENTS IN CHAIN: {len(agents_info)} agents have provided input")
         
         return "\n\n".join(context_parts)
     
@@ -112,78 +107,83 @@ class MultiAgentBase(BaseAgent):
 
 
 class ProposerAgent(MultiAgentBase):
-    """Agent that proposes initial solutions"""
+    """Agent that proposes initial solutions in Chain of Experts"""
     
     def __init__(self, **kwargs):
-        system_prompt = """You are a Proposer Agent. Your role is to:
-1. Analyze the given problem thoroughly
-2. Propose initial solutions or approaches
+        system_prompt = """You are a Proposer Agent in a Chain of Experts workflow. Your role is to:
+1. Analyze the given problem thoroughly and comprehensively
+2. Propose initial solutions, approaches, or strategies
 3. Provide clear reasoning for your proposals
 4. Be creative and consider multiple angles
+5. Set up a strong foundation for the next agent in the chain
 
-Provide well-structured proposals that other agents can build upon."""
+Your output will be passed to the next agent in the chain, so provide well-structured proposals that other agents can build upon."""
         
         super().__init__(role=AgentRole.PROPOSER, system_prompt=system_prompt, **kwargs)
 
 
 class CriticAgent(MultiAgentBase):
-    """Agent that critiques and refines solutions"""
+    """Agent that critiques and refines solutions in Chain of Experts"""
     
     def __init__(self, **kwargs):
-        system_prompt = """You are a Critic Agent. Your role is to:
-1. Carefully analyze proposals from other agents
-2. Identify potential flaws, weaknesses, or improvements
-3. Provide constructive criticism and suggestions
+        system_prompt = """You are a Critic Agent in a Chain of Experts workflow. Your role is to:
+1. Carefully analyze proposals and solutions from the previous agent in the chain
+2. Identify potential flaws, weaknesses, or areas for improvement
+3. Provide constructive criticism and specific suggestions
 4. Ensure logical consistency and completeness
+5. Refine and improve upon the previous agent's work
 
-Be thorough but constructive in your analysis."""
+Review the previous agent's output critically but constructively, building upon their work to create a better solution."""
         
         super().__init__(role=AgentRole.CRITIC, system_prompt=system_prompt, **kwargs)
 
 
 class JudgeAgent(MultiAgentBase):
-    """Agent that makes final decisions"""
+    """Agent that makes final decisions in Chain of Experts"""
     
     def __init__(self, **kwargs):
-        system_prompt = """You are a Judge Agent. Your role is to:
-1. Review all previous agent responses
-2. Weigh the merits of different proposals and critiques
-3. Make final decisions or synthesize the best elements
+        system_prompt = """You are a Judge Agent in a Chain of Experts workflow. Your role is to:
+1. Review all previous agent responses in the chain
+2. Weigh the merits of different proposals, critiques, and refinements
+3. Make final decisions or synthesize the best elements from the chain
 4. Provide clear justification for your final answer
+5. Deliver a definitive, well-reasoned conclusion
 
-Be decisive while acknowledging the contributions of other agents."""
+Be decisive while acknowledging the valuable contributions of previous agents in the chain. Your decision is final."""
         
         super().__init__(role=AgentRole.JUDGE, system_prompt=system_prompt, **kwargs)
 
 
 class SpecialistAgent(MultiAgentBase):
-    """Agent with domain-specific expertise"""
+    """Agent with domain-specific expertise for Chain of Experts"""
     
     def __init__(self, specialty: str = "", **kwargs):
         self.specialty = specialty
         system_prompt = f"""You are a Specialist Agent with expertise in: {specialty}.
-Your role is to:
+Your role in the Chain of Experts workflow is to:
 1. Apply your specialized knowledge to the problem
 2. Provide domain-specific insights and solutions
-3. Explain technical concepts clearly for other agents
+3. Explain technical concepts clearly for other agents in the chain
 4. Highlight important domain-specific considerations
+5. Build upon previous agents' work with your specialized expertise
 
-Leverage your expertise while remaining collaborative."""
+Leverage your expertise while remaining collaborative and preparing well-structured output for the next agent in the chain."""
         
         super().__init__(role=AgentRole.SPECIALIST, system_prompt=system_prompt, **kwargs)
 
 
 class AggregatorAgent(MultiAgentBase):
-    """Agent that combines and synthesizes multiple inputs"""
+    """Agent that combines and synthesizes multiple inputs in Chain of Experts"""
     
     def __init__(self, **kwargs):
-        system_prompt = """You are an Aggregator Agent. Your role is to:
-1. Combine insights from multiple expert agents
+        system_prompt = """You are an Aggregator Agent in a Chain of Experts workflow. Your role is to:
+1. Combine insights from all previous agents in the chain
 2. Identify common themes and reconcile differences
-3. Synthesize a comprehensive solution
+3. Synthesize a comprehensive solution from the chain of expert inputs
 4. Present a unified, coherent final answer
+5. Ensure all valuable contributions from the chain are represented
 
-Focus on integration and synthesis of diverse perspectives."""
+Focus on integration and synthesis of the diverse perspectives provided by previous agents in the chain."""
         
         super().__init__(role=AgentRole.AGGREGATOR, system_prompt=system_prompt, **kwargs)
     
@@ -208,64 +208,35 @@ Focus on integration and synthesis of diverse perspectives."""
         return base_context
 
 
-class DebaterAgent(MultiAgentBase):
-    """Agent designed for debate scenarios"""
-    
-    def __init__(self, position: str = "", **kwargs):
-        self.position = position
-        system_prompt = f"""You are a Debater Agent taking the position: {position}.
-Your role is to:
-1. Argue persuasively for your assigned position
-2. Address counterarguments from other debaters
-3. Use evidence and logical reasoning
-4. Remain respectful while being forceful in your arguments
-
-Defend your position while engaging constructively with opponents."""
-        
-        super().__init__(role=AgentRole.SPECIALIST, system_prompt=system_prompt, **kwargs)
-    
-    def _format_multi_agent_context(self) -> str:
-        """Enhanced context formatting for debates"""
-        base_context = super()._format_multi_agent_context()
-        
-        if "debate" in self.multi_agent_context:
-            debate_context = "\n\nDEBATE CONTEXT:\n"
-            debate_context += f"Your position: {self.position}\n"
-            debate_context += self.multi_agent_context["debate"]
-            return base_context + debate_context
-        
-        return base_context
-
-
 class MathExpertAgent(SpecialistAgent):
-    """Specialized agent for mathematical problems"""
+    """Specialized agent for mathematical problems in Chain of Experts"""
     
     def __init__(self, **kwargs):
         super().__init__(specialty="Mathematics", **kwargs)
         self.system_prompt += """
 
-As a mathematics expert, you should:
-- Show step-by-step solutions
-- Use proper mathematical notation
-- Double-check calculations
-- Explain mathematical concepts clearly
-- Consider multiple solution approaches"""
+As a mathematics expert in the Chain of Experts, you should:
+- Show step-by-step solutions building on previous agents' work
+- Use proper mathematical notation and reasoning
+- Double-check calculations and verify logical consistency
+- Explain mathematical concepts clearly for subsequent agents
+- Consider multiple solution approaches and identify the most robust one"""
 
 
 class CodeExpertAgent(SpecialistAgent):
-    """Specialized agent for coding problems"""
+    """Specialized agent for coding problems in Chain of Experts"""
     
     def __init__(self, **kwargs):
         super().__init__(specialty="Software Engineering", **kwargs)
         self.system_prompt += """
 
-As a coding expert, you should:
-- Write clean, efficient code
-- Include proper error handling
-- Add meaningful comments
-- Consider edge cases
+As a coding expert in the Chain of Experts, you should:
+- Write clean, efficient code building on previous agents' analysis
+- Include proper error handling and edge case considerations
+- Add meaningful comments and documentation
 - Follow best practices and design patterns
-- Test your solutions"""
+- Test and validate your solutions
+- Explain your implementation choices for subsequent agents"""
     
     def _parse_action(self, response: str) -> Any:
         """Extract code from response"""
@@ -284,16 +255,17 @@ As a coding expert, you should:
 
 
 class ReasoningExpertAgent(SpecialistAgent):
-    """Specialized agent for logical reasoning and analysis"""
+    """Specialized agent for logical reasoning and analysis in Chain of Experts"""
     
     def __init__(self, **kwargs):
         super().__init__(specialty="Logical Reasoning", **kwargs)
         self.system_prompt += """
 
-As a reasoning expert, you should:
-- Break down complex problems into steps
-- Identify assumptions and premises
+As a reasoning expert in the Chain of Experts, you should:
+- Break down complex problems into logical steps
+- Identify assumptions and premises from previous agents' work
 - Apply logical principles systematically
-- Check for logical fallacies
-- Consider alternative perspectives
-- Provide clear justification for conclusions""" 
+- Check for logical fallacies and inconsistencies
+- Consider alternative perspectives and approaches
+- Provide clear justification for conclusions
+- Structure your reasoning for the next agent in the chain""" 

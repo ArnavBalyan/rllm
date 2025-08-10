@@ -18,8 +18,6 @@ from rllm.engine.multi_agent_execution_engine import (
     MultiAgentExecutionEngine,
     BaseWorkflow,
     ChainOfExpertsWorkflow,
-    MixtureOfExpertsWorkflow,
-    DebateWorkflow,
     AgentConfig,
     AgentRole
 )
@@ -42,7 +40,14 @@ from verl.trainer.ppo.ray_trainer import (
 
 
 class MultiAgentPPOTrainer(AgentPPOTrainer):
-    """Enhanced PPO trainer for multi-agent workflows"""
+    """
+    Enhanced PPO trainer for multi-agent workflows.
+    
+    Currently supports Chain of Experts workflow where:
+    - Multiple agents execute sequentially 
+    - Each agent can use a separate vLLM instance via router
+    - Training can be done on unified trajectory or final agent only
+    """
     
     def __init__(
         self,
@@ -80,9 +85,9 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         self.multi_agent_config = multi_agent_config or {}
         self.multi_agent_engine = None
         
-        # Training modes
-        self.training_mode = self.multi_agent_config.get("training_mode", "unified")  # "unified", "individual", "joint"
-        self.reward_aggregation = self.multi_agent_config.get("reward_aggregation", "final_agent")  # "final_agent", "average", "weighted"
+        # Training modes for Chain of Experts
+        self.training_mode = self.multi_agent_config.get("training_mode", "final_agent")  # "unified", "final_agent"
+        self.reward_aggregation = self.multi_agent_config.get("reward_aggregation", "final_agent")  # "final_agent", "average"
     
     def init_workers(self):
         """Initialize workers including multi-agent execution engine"""
@@ -141,7 +146,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         return envs
     
     def generate_multi_agent_trajectory(self, timing_raw=None, meta_info=None):
-        """Generate multi-agent trajectories"""
+        """Generate multi-agent trajectories for Chain of Experts"""
         if timing_raw is None:
             timing_raw = {}
         
@@ -183,7 +188,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         return final_gen_batch_output, metrics
     
     def _transform_multi_agent_trajectories(self, workflow_results: List[Dict[str, Any]]):
-        """Transform multi-agent workflow results into DataProto format"""
+        """Transform Chain of Experts workflow results into DataProto format"""
         from verl.utils.torch_functional import pad_sequence_to_length
         
         all_initial_tokens_list = []
@@ -197,20 +202,14 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         for workflow_result in workflow_results:
             # Extract trajectory data based on training mode
             if self.training_mode == "unified":
-                # Create a unified trajectory from all agents
+                # Create a unified trajectory from all agents in the chain
                 unified_trajectory = self._create_unified_trajectory(workflow_result)
                 prompt_tokens, response_tokens, response_masks, score = unified_trajectory
                 
             elif self.training_mode == "final_agent":
-                # Use only the final agent's trajectory
+                # Use only the final agent's trajectory for training
                 final_trajectory = self._extract_final_agent_trajectory(workflow_result)
                 prompt_tokens, response_tokens, response_masks, score = final_trajectory
-                
-            elif self.training_mode == "individual":
-                # Train each agent separately (would need multiple passes)
-                individual_trajectories = self._extract_individual_trajectories(workflow_result)
-                # For now, use the first trajectory
-                prompt_tokens, response_tokens, response_masks, score = individual_trajectories[0]
                 
             else:
                 raise ValueError(f"Unknown training mode: {self.training_mode}")
@@ -311,7 +310,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         return DataProto.from_dict(tensors=tensor_batch), metrics
     
     def _create_unified_trajectory(self, workflow_result: Dict[str, Any]):
-        """Create a unified trajectory from multiple agent interactions"""
+        """Create a unified trajectory from all agents in the Chain of Experts"""
         agent_trajectories = workflow_result.get("agent_trajectories", {})
         
         # Combine all agent responses into a single conversation
@@ -324,7 +323,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             if isinstance(task_data, dict) and "problem" in task_data:
                 combined_prompt = f"Problem: {task_data['problem']}\n\n"
         
-        # Add each agent's contribution
+        # Add each agent's contribution in chain order
         for agent_id, trajectory in agent_trajectories.items():
             if "prompt_tokens" in trajectory and "response_tokens" in trajectory:
                 agent_prompt = self.tokenizer.decode(trajectory["prompt_tokens"])
@@ -350,7 +349,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         return prompt_tokens, response_tokens, response_masks, score
     
     def _extract_final_agent_trajectory(self, workflow_result: Dict[str, Any]):
-        """Extract trajectory from the final agent in the workflow"""
+        """Extract trajectory from the final agent in the Chain of Experts"""
         agent_trajectories = workflow_result.get("agent_trajectories", {})
         
         if not agent_trajectories:
@@ -360,7 +359,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             response_masks = torch.ones_like(response_tokens)
             return prompt_tokens, response_tokens, response_masks, 0.0
         
-        # Get the last agent's trajectory (assuming workflow order matters)
+        # Get the last agent's trajectory (final agent in the chain)
         final_agent_id = list(agent_trajectories.keys())[-1]
         final_trajectory = agent_trajectories[final_agent_id]
         
@@ -372,26 +371,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         
         return prompt_tokens, response_tokens, response_masks, score
     
-    def _extract_individual_trajectories(self, workflow_result: Dict[str, Any]):
-        """Extract individual trajectories for separate training"""
-        agent_trajectories = workflow_result.get("agent_trajectories", {})
-        individual_trajectories = []
-        
-        workflow_score = self._aggregate_workflow_score(workflow_result)
-        
-        for agent_id, trajectory in agent_trajectories.items():
-            prompt_tokens = trajectory.get("prompt_tokens", torch.tensor([self.tokenizer.eos_token_id]))
-            response_tokens = trajectory.get("response_tokens", torch.tensor([self.tokenizer.eos_token_id]))
-            response_masks = trajectory.get("response_masks", torch.ones_like(response_tokens))
-            
-            individual_trajectories.append((prompt_tokens, response_tokens, response_masks, workflow_score))
-        
-        return individual_trajectories
-    
     def _aggregate_workflow_score(self, workflow_result: Dict[str, Any]) -> float:
-        """Aggregate scores from multi-agent workflow"""
+        """Aggregate scores from Chain of Experts workflow"""
         if self.reward_aggregation == "final_agent":
-            # Use score from final agent
+            # Use score from final agent in the chain
             agent_trajectories = workflow_result.get("agent_trajectories", {})
             if agent_trajectories:
                 final_agent_id = list(agent_trajectories.keys())[-1]
@@ -399,19 +382,11 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             return 0.0
         
         elif self.reward_aggregation == "average":
-            # Average scores across all agents
+            # Average scores across all agents in the chain
             agent_trajectories = workflow_result.get("agent_trajectories", {})
             if agent_trajectories:
                 scores = [traj.get("trajectory_reward", 0.0) for traj in agent_trajectories.values()]
                 return sum(scores) / len(scores)
-            return 0.0
-        
-        elif self.reward_aggregation == "weighted":
-            # Weighted average based on agent roles (could be configured)
-            agent_trajectories = workflow_result.get("agent_trajectories", {})
-            if agent_trajectories:
-                # Simple implementation: equal weights
-                return self._aggregate_workflow_score(workflow_result.copy())  # Fall back to average
             return 0.0
         
         else:
@@ -430,7 +405,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         }
     
     def fit_multi_agent(self):
-        """Enhanced training loop for multi-agent workflows"""
+        """Enhanced training loop for Chain of Experts workflows"""
         if self.workflow is None:
             # Fall back to single-agent training
             return self.fit_agent()
@@ -439,7 +414,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         
         logger = Tracking(
             project_name=self.config.trainer.project_name,
-            experiment_name=f"{self.config.trainer.experiment_name}_multi_agent",
+            experiment_name=f"{self.config.trainer.experiment_name}_chain_of_experts",
             default_backend=self.config.trainer.logger,
             config=OmegaConf.to_container(self.config, resolve=True),
         )
@@ -454,17 +429,17 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         start_time = time.time()
         if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
             val_metrics = self._validate_multi_agent()
-            pprint(f"Initial multi-agent validation metrics: {val_metrics}")
+            pprint(f"Initial Chain of Experts validation metrics: {val_metrics}")
             logger.log(data=val_metrics, step=self.global_steps)
             if self.config.trainer.get("val_only", False):
                 return
-        print(f"Time taken to validate multi-agent system: {time.time() - start_time}")
+        print(f"Time taken to validate Chain of Experts system: {time.time() - start_time}")
         
         # Start from step 1
         self.global_steps += 1
         
         for epoch in range(self.config.trainer.total_epochs):
-            pprint(f"Multi-agent epoch {epoch}, step {self.global_steps} started")
+            pprint(f"Chain of Experts epoch {epoch}, step {self.global_steps} started")
             for batch_dict in self.train_dataloader:
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
                 batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))], dtype=object)
@@ -482,10 +457,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     "workflow_type": self.workflow.workflow_id,
                 }
                 
-                with _timer("multi_agent_step", timing_raw):
+                with _timer("chain_of_experts_step", timing_raw):
                     self.init_envs_and_agents(batch)
                     
-                    # Generate multi-agent trajectories
+                    # Generate Chain of Experts trajectories
                     final_gen_batch_output, generate_metrics = self.generate_multi_agent_trajectory(
                         timing_raw=timing_raw, 
                         meta_info=batch.meta_info
@@ -494,7 +469,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     metrics.update(generate_metrics)
                     
                     # Continue with standard PPO training pipeline
-                    # (compute values, advantages, etc.)
                     if self.use_critic:
                         with _timer("values", timing_raw):
                             values = self.critic_wg.compute_values(batch)
@@ -511,9 +485,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                             batch.batch["token_level_scores"] = reward_tensor
                         else:
                             reward_tensor = batch.batch["token_level_scores"]
-                        
-                        # Apply rejection sampling and other processing as in base trainer
-                        # (simplified here for brevity)
                         
                         batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
                         
@@ -564,27 +535,37 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     # Perform final validation
                     if self.val_reward_fn is not None:
                         val_metrics = self._validate_multi_agent()
-                        pprint(f"Final multi-agent validation metrics: {val_metrics}")
+                        pprint(f"Final Chain of Experts validation metrics: {val_metrics}")
                         logger.log(data=val_metrics, step=self.global_steps)
                     return
     
     def _validate_multi_agent(self):
-        """Validation for multi-agent workflows"""
+        """Validation for Chain of Experts workflows"""
         if self.workflow is None:
             return self._validate_agent()
         
-        # Implement multi-agent specific validation
-        # This is a simplified version - could be more sophisticated
-        return self._validate_agent()  # For now, fall back to single-agent validation
+        # For now, fall back to single-agent validation
+        # TODO: Implement Chain of Experts specific validation
+        return self._validate_agent()
 
 
-# Factory functions for creating common multi-agent configurations
+# Factory function for creating Chain of Experts trainer
 def create_chain_of_experts_trainer(
     base_trainer: AgentPPOTrainer,
     agent_configs: List[AgentConfig],
     **kwargs
 ) -> MultiAgentPPOTrainer:
-    """Create a trainer for chain of experts workflow"""
+    """
+    Create a trainer for Chain of Experts workflow.
+    
+    Args:
+        base_trainer: Existing AgentPPOTrainer instance
+        agent_configs: List of agent configurations in chain order
+        **kwargs: Additional multi-agent configuration options
+        
+    Returns:
+        MultiAgentPPOTrainer configured for Chain of Experts
+    """
     workflow = ChainOfExpertsWorkflow(agent_configs)
     return MultiAgentPPOTrainer(
         config=base_trainer.config,
@@ -600,55 +581,4 @@ def create_chain_of_experts_trainer(
         agent_args=base_trainer.agent_args,
         workflow=workflow,
         **kwargs
-    )
-
-
-def create_mixture_of_experts_trainer(
-    base_trainer: AgentPPOTrainer,
-    expert_configs: List[AgentConfig],
-    aggregator_config: AgentConfig,
-    **kwargs
-) -> MultiAgentPPOTrainer:
-    """Create a trainer for mixture of experts workflow"""
-    workflow = MixtureOfExpertsWorkflow(expert_configs, aggregator_config)
-    return MultiAgentPPOTrainer(
-        config=base_trainer.config,
-        tokenizer=base_trainer.tokenizer,
-        role_worker_mapping=base_trainer.role_worker_mapping,
-        resource_pool_manager=base_trainer.resource_pool_manager,
-        ray_worker_group_cls=base_trainer.ray_worker_group_cls,
-        reward_fn=base_trainer.reward_fn,
-        val_reward_fn=base_trainer.val_reward_fn,
-        env_class=base_trainer.env_class,
-        agent_class=base_trainer.agent_class,
-        env_args=base_trainer.env_args,
-        agent_args=base_trainer.agent_args,
-        workflow=workflow,
-        **kwargs
-    )
-
-
-def create_debate_trainer(
-    base_trainer: AgentPPOTrainer,
-    debater_configs: List[AgentConfig],
-    judge_config: AgentConfig,
-    max_rounds: int = 3,
-    **kwargs
-) -> MultiAgentPPOTrainer:
-    """Create a trainer for debate workflow"""
-    workflow = DebateWorkflow(debater_configs, judge_config, max_rounds)
-    return MultiAgentPPOTrainer(
-        config=base_trainer.config,
-        tokenizer=base_trainer.tokenizer,
-        role_worker_mapping=base_trainer.role_worker_mapping,
-        resource_pool_manager=base_trainer.resource_pool_manager,
-        ray_worker_group_cls=base_trainer.ray_worker_group_cls,
-        reward_fn=base_trainer.reward_fn,
-        val_reward_fn=base_trainer.val_reward_fn,
-        env_class=base_trainer.env_class,
-        agent_class=base_trainer.agent_class,
-        env_args=base_trainer.env_args,
-        agent_args=base_trainer.agent_args,
-        workflow=workflow,
-        multi_agent_config={"max_rounds": max_rounds, **kwargs}
     ) 

@@ -54,12 +54,17 @@ class WorkflowConnection:
 
 @dataclass
 class WorkflowStep:
-    """Represents a step in the multi-agent workflow"""
+    """
+    Represents a logical execution phase in the multi-agent workflow.
+    
+    A step is a collection of agents that execute together in a specific mode:
+    - For Chain of Experts: each step contains exactly one agent
+    - The step defines HOW agents execute (sequential/parallel) and WHICH agents participate
+    """
     step_id: str
     agent_ids: List[str]  # Agents that participate in this step
-    execution_mode: str = "sequential"  # "sequential", "parallel", "debate"
-    max_rounds: int = 1  # For debate mode
-    aggregation_fn: Optional[callable] = None  # For parallel mode
+    execution_mode: str = "sequential"  # "sequential" for Chain of Experts
+    description: Optional[str] = None  # Human-readable description of what this step does
 
 
 class BaseWorkflow(ABC):
@@ -73,7 +78,12 @@ class BaseWorkflow(ABC):
     
     @abstractmethod
     def define_workflow(self) -> Tuple[List[AgentConfig], List[WorkflowStep], List[WorkflowConnection]]:
-        """Define the workflow structure"""
+        """
+        Define the workflow structure.
+        
+        Returns:
+            Tuple of (agent_configs, workflow_steps, connections)
+        """
         pass
     
     @abstractmethod
@@ -83,7 +93,12 @@ class BaseWorkflow(ABC):
 
 
 class ChainOfExpertsWorkflow(BaseWorkflow):
-    """Chain of Experts workflow: Agent A -> Agent B -> Agent C"""
+    """
+    Chain of Experts workflow: Agent A → Agent B → Agent C
+    
+    Each agent in the chain receives the output from the previous agent as context.
+    This enables sequential refinement and specialization of solutions.
+    """
     
     def __init__(self, agent_configs: List[AgentConfig]):
         super().__init__("chain_of_experts")
@@ -93,127 +108,39 @@ class ChainOfExpertsWorkflow(BaseWorkflow):
         connections = []
         steps = []
         
-        # Create sequential connections
+        # Create sequential connections (Agent A → Agent B → Agent C)
         for i in range(len(self.agent_configs_list) - 1):
             connections.append(WorkflowConnection(
                 from_agent=self.agent_configs_list[i].agent_id,
                 to_agent=self.agent_configs_list[i + 1].agent_id
             ))
         
-        # Create sequential steps
+        # Create sequential steps (each step contains exactly one agent)
         for i, config in enumerate(self.agent_configs_list):
             steps.append(WorkflowStep(
                 step_id=f"step_{i}",
                 agent_ids=[config.agent_id],
-                execution_mode="sequential"
+                execution_mode="sequential",
+                description=f"Execute {config.role.value} agent: {config.agent_id}"
             ))
         
         return self.agent_configs_list, steps, connections
     
     def process_step_output(self, step_outputs: Dict[str, Any]) -> Dict[str, Any]:
-        # For chain of experts, pass output directly to next agent
-        return step_outputs
-
-
-class MixtureOfExpertsWorkflow(BaseWorkflow):
-    """Mixture of Experts workflow: Multiple agents work in parallel then aggregate"""
-    
-    def __init__(self, expert_configs: List[AgentConfig], aggregator_config: AgentConfig):
-        super().__init__("mixture_of_experts")
-        self.expert_configs = expert_configs
-        self.aggregator_config = aggregator_config
-    
-    def define_workflow(self) -> Tuple[List[AgentConfig], List[WorkflowStep], List[WorkflowConnection]]:
-        all_configs = self.expert_configs + [self.aggregator_config]
-        
-        # Parallel step for experts
-        expert_step = WorkflowStep(
-            step_id="expert_parallel",
-            agent_ids=[config.agent_id for config in self.expert_configs],
-            execution_mode="parallel",
-            aggregation_fn=self._aggregate_expert_outputs
-        )
-        
-        # Sequential step for aggregator
-        aggregator_step = WorkflowStep(
-            step_id="aggregator",
-            agent_ids=[self.aggregator_config.agent_id],
-            execution_mode="sequential"
-        )
-        
-        # Connections from experts to aggregator
-        connections = []
-        for expert_config in self.expert_configs:
-            connections.append(WorkflowConnection(
-                from_agent=expert_config.agent_id,
-                to_agent=self.aggregator_config.agent_id
-            ))
-        
-        return all_configs, [expert_step, aggregator_step], connections
-    
-    def _aggregate_expert_outputs(self, outputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Aggregate outputs from multiple experts"""
-        aggregated = {
-            "expert_responses": [],
-            "aggregated_prompt": "Here are the responses from multiple experts:\n\n"
-        }
-        
-        for agent_id, output in outputs.items():
-            aggregated["expert_responses"].append({
-                "agent_id": agent_id,
-                "response": output.get("response", "")
-            })
-            aggregated["aggregated_prompt"] += f"Expert {agent_id}: {output.get('response', '')}\n\n"
-        
-        aggregated["aggregated_prompt"] += "Please provide a final answer by considering all expert opinions:"
-        return aggregated
-    
-    def process_step_output(self, step_outputs: Dict[str, Any]) -> Dict[str, Any]:
-        return step_outputs
-
-
-class DebateWorkflow(BaseWorkflow):
-    """Multi-agent debate workflow where agents discuss and refine solutions"""
-    
-    def __init__(self, debater_configs: List[AgentConfig], judge_config: AgentConfig, max_rounds: int = 3):
-        super().__init__("debate")
-        self.debater_configs = debater_configs
-        self.judge_config = judge_config
-        self.max_rounds = max_rounds
-    
-    def define_workflow(self) -> Tuple[List[AgentConfig], List[WorkflowStep], List[WorkflowConnection]]:
-        all_configs = self.debater_configs + [self.judge_config]
-        
-        # Debate step
-        debate_step = WorkflowStep(
-            step_id="debate_round",
-            agent_ids=[config.agent_id for config in self.debater_configs],
-            execution_mode="debate",
-            max_rounds=self.max_rounds
-        )
-        
-        # Judge step
-        judge_step = WorkflowStep(
-            step_id="judge",
-            agent_ids=[self.judge_config.agent_id],
-            execution_mode="sequential"
-        )
-        
-        connections = []
-        for debater_config in self.debater_configs:
-            connections.append(WorkflowConnection(
-                from_agent=debater_config.agent_id,
-                to_agent=self.judge_config.agent_id
-            ))
-        
-        return all_configs, [debate_step, judge_step], connections
-    
-    def process_step_output(self, step_outputs: Dict[str, Any]) -> Dict[str, Any]:
+        """For chain of experts, pass output directly to next agent"""
         return step_outputs
 
 
 class MultiAgentExecutionEngine:
-    """Enhanced execution engine for multi-agent workflows"""
+    """
+    Enhanced execution engine for multi-agent workflows.
+    
+    Architecture:
+    - Creates individual AgentExecutionEngine instances for each agent
+    - Each agent can have its own vLLM instance/shard via the router
+    - Orchestrates sequential/parallel execution according to workflow definition
+    - Integrates with existing rLLM async infrastructure
+    """
     
     def __init__(
         self,
@@ -243,6 +170,7 @@ class MultiAgentExecutionEngine:
         self.agent_configs, self.workflow_steps, self.connections = workflow.define_workflow()
         
         # Create individual agent execution engines for each agent type
+        # Each agent gets its own engine which can connect to separate vLLM instances
         self.agent_engines: Dict[str, AgentExecutionEngine] = {}
         self._initialize_agent_engines()
         
@@ -253,12 +181,33 @@ class MultiAgentExecutionEngine:
         self.workflow_states: Dict[str, Dict] = {}
     
     def _initialize_agent_engines(self):
-        """Initialize individual execution engines for each agent"""
+        """
+        Initialize individual execution engines for each agent.
+        
+        Each agent gets its own AgentExecutionEngine which:
+        - Can connect to a separate vLLM instance via router
+        - Handles its own model path and configuration
+        - Uses the same async infrastructure as single-agent rLLM
+        """
         for config in self.agent_configs:
+            # Create engine args specific to this agent
+            agent_engine_args = self.kwargs.copy()
+            
+            # Add agent-specific model configuration if provided
+            if config.model_path:
+                agent_engine_args["model_path"] = config.model_path
+            
+            # Add sampling parameters
+            agent_engine_args["sampling_params"] = {
+                "temperature": config.temperature,
+                "top_p": config.top_p,
+                **agent_engine_args.get("sampling_params", {})
+            }
+            
             self.agent_engines[config.agent_id] = AgentExecutionEngine(
                 engine_name=self.engine_name,
                 tokenizer=self.tokenizer,
-                rollout_engine=self.rollout_engine,
+                rollout_engine=self.rollout_engine,  # Shared rollout engine with router
                 agent_class=config.agent_class,
                 agent_args=config.agent_args,
                 env_class=self.env_class,
@@ -268,8 +217,8 @@ class MultiAgentExecutionEngine:
                 max_prompt_length=config.max_prompt_length,
                 trajectory_timeout=self.trajectory_timeout,
                 max_workers=self.max_workers,
-                **self.kwargs
-    )
+                **agent_engine_args
+            )
     
     def update_envs_and_agents(self, envs: List[BaseEnv]):
         """Update environment instances for workflows"""
@@ -290,7 +239,15 @@ class MultiAgentExecutionEngine:
         mode: str = "Text",
         **kwargs
     ) -> Dict[str, Any]:
-        """Execute a complete multi-agent workflow trajectory"""
+        """
+        Execute a complete multi-agent workflow trajectory.
+        
+        For Chain of Experts:
+        1. Execute Step 0: Proposer agent
+        2. Execute Step 1: Expert agent (receives Proposer output as context)
+        3. Execute Step 2: Critic agent (receives Expert output as context)
+        4. Execute Step 3: Judge agent (receives Critic output as context)
+        """
         
         workflow_id = f"{application_id}_workflow_{workflow_idx}"
         self.workflow_states[workflow_id] = {
@@ -301,9 +258,9 @@ class MultiAgentExecutionEngine:
         }
         
         try:
-            # Execute each step in the workflow
+            # Execute each step in the workflow sequentially
             for step_idx, step in enumerate(self.workflow_steps):
-                colorful_print(f"Executing workflow step {step_idx}: {step.step_id}", "cyan")
+                colorful_print(f"Executing workflow step {step_idx}: {step.step_id} - {step.description}", "cyan")
                 
                 step_output = await self._execute_workflow_step(
                     workflow_id, step, workflow_idx, application_id, seed, mode, **kwargs
@@ -336,18 +293,14 @@ class MultiAgentExecutionEngine:
         mode: str,
         **kwargs
     ) -> Dict[str, Any]:
-        """Execute a single workflow step"""
+        """
+        Execute a single workflow step.
+        
+        For Chain of Experts, this executes exactly one agent sequentially.
+        """
         
         if step.execution_mode == "sequential":
             return await self._execute_sequential_step(
-                workflow_id, step, workflow_idx, application_id, seed, mode, **kwargs
-            )
-        elif step.execution_mode == "parallel":
-            return await self._execute_parallel_step(
-                workflow_id, step, workflow_idx, application_id, seed, mode, **kwargs
-            )
-        elif step.execution_mode == "debate":
-            return await self._execute_debate_step(
                 workflow_id, step, workflow_idx, application_id, seed, mode, **kwargs
             )
         else:
@@ -363,14 +316,18 @@ class MultiAgentExecutionEngine:
         mode: str,
         **kwargs
     ) -> Dict[str, Any]:
-        """Execute agents sequentially"""
+        """
+        Execute agents sequentially within a step.
+        
+        For Chain of Experts, each step has exactly one agent.
+        """
         step_outputs = {}
         
         for agent_id in step.agent_ids:
             # Prepare input for this agent based on previous steps
             agent_input = self._prepare_agent_input(workflow_id, agent_id)
             
-            # Execute agent
+            # Execute agent using its dedicated AgentExecutionEngine
             agent_output = await self._execute_single_agent(
                 agent_id, workflow_idx, application_id, seed, mode, agent_input, **kwargs
             )
@@ -382,94 +339,6 @@ class MultiAgentExecutionEngine:
         
         return step_outputs
     
-    async def _execute_parallel_step(
-        self,
-        workflow_id: str,
-        step: WorkflowStep,
-        workflow_idx: int,
-        application_id: str,
-        seed: int,
-        mode: str,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """Execute agents in parallel"""
-        
-        # Prepare inputs for all agents
-        agent_inputs = {}
-        for agent_id in step.agent_ids:
-            agent_inputs[agent_id] = self._prepare_agent_input(workflow_id, agent_id)
-        
-        # Execute all agents in parallel
-        tasks = []
-        for agent_id in step.agent_ids:
-            task = self._execute_single_agent(
-                agent_id, workflow_idx, f"{application_id}_{agent_id}", 
-                seed, mode, agent_inputs[agent_id], **kwargs
-            )
-            tasks.append((agent_id, task))
-        
-        # Wait for all to complete
-        step_outputs = {}
-        for agent_id, task in tasks:
-            agent_output = await task
-            step_outputs[agent_id] = agent_output
-            self.workflow_states[workflow_id]["agent_trajectories"][agent_id] = agent_output
-        
-        # Apply aggregation function if provided
-        if step.aggregation_fn:
-            step_outputs = step.aggregation_fn(step_outputs)
-        
-        return step_outputs
-    
-    async def _execute_debate_step(
-        self,
-        workflow_id: str,
-        step: WorkflowStep,
-        workflow_idx: int,
-        application_id: str,
-        seed: int,
-        mode: str,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """Execute multi-round debate between agents"""
-        
-        debate_history = []
-        agent_contexts = {agent_id: {} for agent_id in step.agent_ids}
-        
-        for round_idx in range(step.max_rounds):
-            colorful_print(f"Debate round {round_idx + 1}/{step.max_rounds}", "yellow")
-            
-            round_outputs = {}
-            
-            for agent_id in step.agent_ids:
-                # Prepare input including debate history
-                agent_input = self._prepare_debate_input(
-                    workflow_id, agent_id, debate_history, round_idx
-                )
-                
-                # Execute agent
-                agent_output = await self._execute_single_agent(
-                    agent_id, workflow_idx, f"{application_id}_{agent_id}_r{round_idx}",
-                    seed, mode, agent_input, **kwargs
-                )
-                
-                round_outputs[agent_id] = agent_output
-                agent_contexts[agent_id][f"round_{round_idx}"] = agent_output
-            
-            # Add round to debate history
-            debate_history.append({
-                "round": round_idx,
-                "outputs": round_outputs
-            })
-        
-        # Return final debate state
-        return {
-            "debate_history": debate_history,
-            "final_positions": {agent_id: contexts[f"round_{step.max_rounds-1}"] 
-                             for agent_id, contexts in agent_contexts.items()},
-            "agent_contexts": agent_contexts
-        }
-    
     async def _execute_single_agent(
         self,
         agent_id: str,
@@ -480,17 +349,24 @@ class MultiAgentExecutionEngine:
         agent_input: Dict[str, Any],
         **kwargs
     ) -> Dict[str, Any]:
-        """Execute a single agent with given input"""
+        """
+        Execute a single agent with given input.
+        
+        This uses the agent's dedicated AgentExecutionEngine which:
+        - Connects to the appropriate vLLM instance via router
+        - Handles async execution
+        - Manages the agent's environment interaction
+        """
         
         engine = self.agent_engines[agent_id]
         
-        # Update agent's environment with the input
+        # Update agent's environment with the input from previous agents
         env = engine.envs[workflow_idx]
         agent = engine.agents[workflow_idx]
         
-        # Reset environment and agent with the input
+        # Reset environment and agent with the input from previous agents
         if agent_input:
-            # Custom reset with input
+            # Custom reset with input from previous agents in chain
             observation, info = await asyncio.get_event_loop().run_in_executor(
                 engine.executor, lambda: env.reset() if not hasattr(env, 'reset_with_input') 
                 else env.reset_with_input(agent_input)
@@ -502,7 +378,7 @@ class MultiAgentExecutionEngine:
         
         agent.reset()
         
-        # Execute the agent trajectory
+        # Execute the agent trajectory using existing async infrastructure
         trajectory_result = await engine.run_agent_trajectory_async(
             workflow_idx, application_id, seed, mode, **kwargs
         )
@@ -510,7 +386,13 @@ class MultiAgentExecutionEngine:
         return trajectory_result
     
     def _prepare_agent_input(self, workflow_id: str, agent_id: str) -> Dict[str, Any]:
-        """Prepare input for an agent based on previous workflow steps"""
+        """
+        Prepare input for an agent based on previous workflow steps.
+        
+        For Chain of Experts:
+        - First agent gets no input (starts fresh)
+        - Subsequent agents get the output from the previous agent as context
+        """
         
         # Find incoming connections to this agent
         incoming_data = {}
@@ -519,7 +401,7 @@ class MultiAgentExecutionEngine:
             if connection.to_agent == agent_id:
                 source_agent = connection.from_agent
                 
-                # Find the output from source agent
+                # Find the output from source agent in previous steps
                 for step_id, step_output in self.workflow_states[workflow_id]["step_outputs"].items():
                     if source_agent in step_output:
                         data = step_output[source_agent]
@@ -532,39 +414,19 @@ class MultiAgentExecutionEngine:
         
         return incoming_data
     
-    def _prepare_debate_input(
-        self, 
-        workflow_id: str, 
-        agent_id: str, 
-        debate_history: List[Dict], 
-        round_idx: int
-    ) -> Dict[str, Any]:
-        """Prepare input for debate round"""
-        
-        base_input = self._prepare_agent_input(workflow_id, agent_id)
-        
-        # Add debate context
-        debate_context = {
-            "round": round_idx,
-            "previous_rounds": debate_history,
-            "other_agents": [aid for aid in self.workflow.agent_configs if aid != agent_id]
-        }
-        
-        base_input["debate_context"] = debate_context
-        return base_input
-    
     def _process_workflow_completion(self, workflow_id: str) -> Dict[str, Any]:
         """Process the completion of a workflow"""
         
         state = self.workflow_states[workflow_id]
         total_time = time.time() - state["start_time"]
         
-        # Get final outputs
+        # Get final outputs (from the last step)
         final_step_outputs = list(state["step_outputs"].values())[-1] if state["step_outputs"] else {}
         
         # Compute workflow-level metrics
         workflow_result = {
             "workflow_id": workflow_id,
+            "workflow_type": self.workflow.workflow_id,
             "total_time": total_time,
             "steps_completed": state["current_step"],
             "final_outputs": final_step_outputs,
@@ -632,79 +494,4 @@ class MultiAgentExecutionEngine:
                 raise e
         
         # Return results in original order
-        return [all_results[i] for i in range(len(tasks))]
-
-
-# Integration with existing trainer
-class MultiAgentPPOTrainer:
-    """Integration class for multi-agent workflows with existing PPO training"""
-    
-    def __init__(
-        self,
-        base_trainer,  # AgentPPOTrainer instance
-        workflow: BaseWorkflow,
-        **kwargs
-    ):
-        self.base_trainer = base_trainer
-        self.workflow = workflow
-        
-        # Replace the single-agent execution engine with multi-agent version
-        self.multi_agent_engine = MultiAgentExecutionEngine(
-            workflow=workflow,
-            env_class=base_trainer.env_class,
-            env_args=base_trainer.env_args,
-            engine_name="verl",  # Use verl for training
-            tokenizer=base_trainer.tokenizer,
-            rollout_engine=base_trainer.rollout_wg if hasattr(base_trainer, 'rollout_wg') else None,
-            n_parallel_workflows=base_trainer.config.actor_rollout_ref.rollout.n,
-            **kwargs
-        )
-    
-    def init_envs_and_agents(self, batch):
-        """Initialize environments and agents for multi-agent training"""
-        
-        # Use base trainer's environment initialization
-        envs = self.base_trainer.init_envs_and_agents(batch)
-        
-        # Update multi-agent engine with environments
-        self.multi_agent_engine.update_envs_and_agents(envs)
-        
-        return envs
-    
-    async def generate_multi_agent_trajectories(self, tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Generate multi-agent trajectories for training"""
-        
-        return await self.multi_agent_engine.execute_multi_agent_workflows(tasks)
-    
-    def transform_multi_agent_trajectories(self, trajectories: List[Dict[str, Any]]):
-        """Transform multi-agent trajectories into format expected by verl"""
-        
-        # This would need to aggregate multiple agent trajectories into single training examples
-        # The exact implementation depends on how you want to train the multi-agent system
-        
-        # Option 1: Train each agent separately
-        # Option 2: Train a unified model with multi-agent context
-        # Option 3: Use different loss functions for different agents
-        
-        # For now, we'll use a simple approach where we concatenate agent responses
-        transformed_trajectories = []
-        
-        for workflow_result in trajectories:
-            agent_trajectories = workflow_result.get("agent_trajectories", {})
-            
-            # Create a unified trajectory by combining agent outputs
-            if agent_trajectories:
-                # Take the final agent's trajectory as primary
-                final_agent_id = list(agent_trajectories.keys())[-1]
-                primary_trajectory = agent_trajectories[final_agent_id]
-                
-                # Add multi-agent context to the trajectory
-                primary_trajectory["multi_agent_context"] = {
-                    "workflow_type": self.workflow.workflow_id,
-                    "agent_count": len(agent_trajectories),
-                    "collaboration_history": workflow_result.get("step_outputs", {})
-                }
-                
-                transformed_trajectories.append(primary_trajectory)
-        
-        return transformed_trajectories 
+        return [all_results[i] for i in range(len(tasks))] 
