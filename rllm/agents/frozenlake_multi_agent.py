@@ -1,7 +1,7 @@
 import copy
 import logging
 import re
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from rllm.agents.agent import Action, BaseAgent, Step, Trajectory
 from rllm.agents.multi_agent import MultiAgentBase
@@ -46,26 +46,20 @@ The final action MUST be one of: Up, Down, Left, Right.
 Focus on SAFETY and STRATEGY rather than just the shortest path.
 """
 
-    def __init__(self, max_steps: int = None, **kwargs):
-        super().__init__()
+    def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
+        super().__init__(agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
         self.max_steps = max_steps
         self.step = 0
         self.reset()
 
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
         """Update proposer agent with environment observation and multi-agent context"""
-        # Call parent to handle multi-agent context
+        # Call parent to handle multi-agent context and update trajectory
         super().update_from_env(observation, reward, done, info, **kwargs)
         
-        # Format observation for proposer
-        current_obs_str = str(observation)
-        user_prompt = f"Current Observation (Step {self.step}):\n{current_obs_str}\n"
-        user_prompt += "As the PROPOSER, analyze this FrozenLake board and suggest a strategic approach for the next move."
-        
-        if self.step > 0:
-            user_prompt += "\nConsider: What strategy would be safest and most effective?"
-        
-        self.messages.append({"role": "user", "content": user_prompt})
+        # The observation is now stored in the trajectory by the parent class
+        # No need to manually manage messages - they're handled by chat_completions property
+        self.step += 1
 
 
 class FrozenLakeExpertAgent(MultiAgentBase):
@@ -105,29 +99,20 @@ The final action MUST be one of: Up, Down, Left, Right.
 Focus on PRECISE EXECUTION of the proposed strategy.
 """
 
-    def __init__(self, max_steps: int = None, **kwargs):
-        super().__init__()
+    def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
+        super().__init__(agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
         self.max_steps = max_steps
         self.step = 0
         self.reset()
 
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
         """Update expert agent with environment observation and multi-agent context"""
-        # Call parent to handle multi-agent context
+        # Call parent to handle multi-agent context and update trajectory
         super().update_from_env(observation, reward, done, info, **kwargs)
         
-        # Format observation for expert
-        current_obs_str = str(observation)
-        user_prompt = f"Current Observation (Step {self.step}):\n{current_obs_str}\n"
-        user_prompt += "As the EXPERT, review the Proposer's strategy and make the specific tactical move."
-        
-        # Add collaboration prompt with Proposer's analysis
-        if hasattr(self, 'collaboration_prompt') and self.collaboration_prompt:
-            user_prompt += f"\n\nProposer's Strategic Analysis:\n{self.collaboration_prompt}\n"
-        
-        user_prompt += "\nBased on this strategy, what is the best specific move to make right now?"
-        
-        self.messages.append({"role": "user", "content": user_prompt})
+        # The observation is now stored in the trajectory by the parent class
+        # No need to manually manage messages - they're handled by chat_completions property
+        self.step += 1
 
 
 class FrozenLakeJudgeAgent(MultiAgentBase):
@@ -167,29 +152,20 @@ The final action MUST be one of: Up, Down, Left, Right.
 Focus on SAFETY VALIDATION and OPTIMAL CHOICE SELECTION.
 """
 
-    def __init__(self, max_steps: int = None, **kwargs):
-        super().__init__()
+    def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
+        super().__init__(agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
         self.max_steps = max_steps
         self.step = 0
         self.reset()
 
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
         """Update judge agent with environment observation and multi-agent context"""
-        # Call parent to handle multi-agent context
+        # Call parent to handle multi-agent context and update trajectory
         super().update_from_env(observation, reward, done, info, **kwargs)
         
-        # Format observation for judge
-        current_obs_str = str(observation)
-        user_prompt = f"Current Observation (Step {self.step}):\n{current_obs_str}\n"
-        user_prompt += "As the JUDGE, review both experts' recommendations and make the final decision."
-        
-        # Add collaboration prompt with both previous agents' analyses
-        if hasattr(self, 'collaboration_prompt') and self.collaboration_prompt:
-            user_prompt += f"\n\nChain of Experts Analysis:\n{self.collaboration_prompt}\n"
-        
-        user_prompt += "\nBased on all expert input, what is the safest and most optimal final move?"
-        
-        self.messages.append({"role": "user", "content": user_prompt})
+        # The observation is now stored in the trajectory by the parent class
+        # No need to manually manage messages - they're handled by chat_completions property
+        self.step += 1
 
 
 class FrozenLakeMultiAgentEnv:

@@ -1,11 +1,11 @@
 import hydra
+import ray
 from omegaconf import DictConfig
 
 from rllm.agents.frozenlake_multi_agent import (
     FrozenLakeProposerAgent,
     FrozenLakeExpertAgent, 
     FrozenLakeJudgeAgent,
-    FrozenLakeMultiAgentEnv
 )
 from rllm.data import DatasetRegistry
 from rllm.engine.multi_agent_execution_engine import (
@@ -33,6 +33,18 @@ class FrozenLakeChainOfExpertsEnv(MultiAgentEnv):
         # Initialize base FrozenLake environment
         self.base_env = FrozenLakeEnv(**kwargs)
         super().__init__()
+    
+    def _create_observation(self):
+        """Create observation for single-agent mode"""
+        # Delegate to base environment's reset to get observation
+        obs, _ = self.base_env.reset()
+        return obs
+    
+    def _create_info(self):
+        """Create info for single-agent mode"""
+        # Get info from base environment
+        _, info = self.base_env.reset()
+        return info
     
     def reset(self):
         """Reset the environment for a new episode"""
@@ -106,54 +118,143 @@ def create_frozenlake_chain_of_experts_agents():
     return agents
 
 
-@hydra.main(config_path="pkg://rllm.trainer.config", config_name="ppo_trainer", version_base=None)
-def main(config: DictConfig):
-    """Main training function for FrozenLake Chain of Experts"""
-    
-    print("Starting FrozenLake Chain of Experts Training")
-    print("=" * 60)
-    
-    # Load datasets
-    train_dataset = DatasetRegistry.load_dataset("frozenlake", "train")
-    val_dataset = DatasetRegistry.load_dataset("frozenlake", "test")
-    
-    print(f"Loaded datasets - Train: {len(train_dataset)}, Val: {len(val_dataset)}")
-    
+@ray.remote(num_cpus=1)
+def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, agent_args=None, env_args=None):
+    """
+    Multi-agent training function that sets up all required infrastructure.
+    Based on train_agent_ppo.py but adapted for Chain of Experts.
+    """
+    from pprint import pprint
+    from omegaconf import OmegaConf
+    from verl.utils.fs import copy_local_path_from_hdfs
+    from verl.utils import hf_tokenizer
+    from verl.single_controller.ray import RayWorkerGroup
+    from verl.workers.fsdp_workers import ActorRolloutRefWorker, AsyncActorRolloutRefWorker, CriticWorker
+    from verl.trainer.ppo.ray_trainer import ResourcePoolManager, Role
+    from verl.trainer.ppo.reward import load_reward_manager
+
+    pprint(OmegaConf.to_container(config, resolve=True))
+    OmegaConf.resolve(config)
+
+    # Download the checkpoint from hdfs
+    local_path = copy_local_path_from_hdfs(config.actor_rollout_ref.model.path)
+
+    # Instantiate tokenizer
+    trust_remote_code = config.data.get("trust_remote_code", False)
+    tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code)
+
+    if config.actor_rollout_ref.actor.strategy in ["fsdp", "fsdp2"]:
+        assert config.critic.strategy in ["fsdp", "fsdp2"]
+        
+        actor_rollout_cls = AsyncActorRolloutRefWorker if config.actor_rollout_ref.rollout.mode == "async" else ActorRolloutRefWorker
+        ray_worker_group_cls = RayWorkerGroup
+    else:
+        raise NotImplementedError
+
+    role_worker_mapping = {
+        Role.ActorRollout: ray.remote(max_concurrency=2048)(actor_rollout_cls),
+        Role.Critic: ray.remote(CriticWorker),
+    }
+
+    global_pool_id = "global_pool"
+    resource_pool_spec = {
+        global_pool_id: [config.trainer.n_gpus_per_node] * config.trainer.nnodes,
+    }
+    mapping = {
+        Role.ActorRollout: global_pool_id,
+        Role.Critic: global_pool_id,
+    }
+
+    if config.algorithm.use_kl_in_reward or config.actor_rollout_ref.actor.use_kl_loss:
+        role_worker_mapping[Role.RefPolicy] = ray.remote(ActorRolloutRefWorker)
+        mapping[Role.RefPolicy] = global_pool_id
+
+    reward_fn = load_reward_manager(config, tokenizer, num_examine=0, **config.reward_model.get("reward_kwargs", {}))
+    val_reward_fn = load_reward_manager(config, tokenizer, num_examine=1)
+    resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
+
+    # Use the classes passed in or defaults
+    if env_class is None:
+        env_class = FrozenLakeChainOfExpertsEnv
+    if agent_class is None:
+        agent_class = FrozenLakeProposerAgent
+
+    env_args = env_args or {}
+    agent_args = agent_args or {}
+    if config.env.get("env_args") is not None:
+        env_args.update(config.env.get("env_args"))
+    if config.agent.get("agent_args") is not None:
+        agent_args.update(config.agent.get("agent_args"))
+
+    # Create the base trainer with all required infrastructure
+    base_trainer = AgentPPOTrainer(
+        config=config,
+        tokenizer=tokenizer,
+        role_worker_mapping=role_worker_mapping,
+        resource_pool_manager=resource_pool_manager,
+        ray_worker_group_cls=ray_worker_group_cls,
+        reward_fn=reward_fn,
+        val_reward_fn=val_reward_fn,
+        env_class=env_class,
+        agent_class=agent_class,
+        env_args=env_args,
+        agent_args=agent_args,
+    )
+
+    print("Created base AgentPPOTrainer")
+
+    # Create the Chain of Experts agents configuration
     agent_configs = create_frozenlake_chain_of_experts_agents()
     
     print("Created Chain of Experts agents:")
     for agent_config in agent_configs:
         print(f"  - {agent_config.agent_id} ({agent_config.role.value}): {agent_config.agent_class.__name__}")
-    
-    base_trainer = AgentPPOTrainer(
-        agent_class=FrozenLakeProposerAgent,
-        env_class=FrozenLakeChainOfExpertsEnv,
-        config=config,
-        train_dataset=train_dataset,
-        val_dataset=val_dataset,
-    )
-    
-    print("Created base trainer")
-    
+
+    # Multi-agent configuration
     multi_agent_config = {
         "training_mode": "final_agent",  # Train on final judge's decision
         "reward_aggregation": "final_agent",  # Use final judge's reward
     }
-    
+
+    # Create the multi-agent trainer
     trainer = create_chain_of_experts_trainer(
         base_trainer=base_trainer,
         agent_configs=agent_configs,
         multi_agent_config=multi_agent_config
     )
     
+    print("Created Chain of Experts trainer")
     print(f"   Training mode: {multi_agent_config['training_mode']}")
     print(f"   Reward aggregation: {multi_agent_config['reward_aggregation']}")
     print("=" * 60)
-    
+
+    # Initialize and start training
+    trainer.init_workers()
     print("Starting Chain of Experts training...")
     trainer.fit_multi_agent()
     
     print("Training completed!")
+
+
+@hydra.main(config_path="pkg://rllm.trainer.config", config_name="ppo_trainer", version_base=None)
+def main(config: DictConfig):
+    """Main function that starts the Ray-based training"""
+    
+    print("Starting FrozenLake Chain of Experts Training")
+    print("=" * 60)
+    
+    # Initialize Ray if not already initialized
+    if not ray.is_initialized():
+        ray.init(runtime_env={"env_vars": {"TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN"}})
+
+    # Start the training process
+    ray.get(train_frozenlake_chain_of_experts.remote(
+        config, 
+        agent_class=FrozenLakeProposerAgent, 
+        env_class=FrozenLakeChainOfExpertsEnv,
+        agent_args={},
+        env_args={}
+    ))
 
 
 if __name__ == "__main__":

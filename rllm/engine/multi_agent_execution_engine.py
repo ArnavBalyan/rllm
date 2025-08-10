@@ -17,6 +17,7 @@ from rllm.agents.agent import Action, BaseAgent, Trajectory
 from rllm.engine.agent_execution_engine import AgentExecutionEngine
 from rllm.environments.base.base_env import BaseEnv
 from rllm.misc import colorful_print
+from verl.trainer.ppo.ray_trainer import _timer
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,7 @@ class MultiAgentExecutionEngine:
         engine_name: str = "verl",
         tokenizer=None,
         rollout_engine=None,
+        config=None,
         trajectory_timeout: Optional[int] = None,
         max_workers: int = 64,
         **kwargs
@@ -161,6 +163,7 @@ class MultiAgentExecutionEngine:
         self.engine_name = engine_name
         self.tokenizer = tokenizer
         self.rollout_engine = rollout_engine
+        self.config = config
         self.trajectory_timeout = trajectory_timeout or int(1e9)
         self.max_workers = max_workers
         self.kwargs = kwargs
@@ -189,6 +192,10 @@ class MultiAgentExecutionEngine:
             # Create engine args specific to this agent
             agent_engine_args = self.kwargs.copy()
             
+            # Remove parameters that will be passed explicitly to avoid conflicts
+            agent_engine_args.pop('max_response_length', None)
+            agent_engine_args.pop('max_prompt_length', None)
+            
             # Add agent-specific model configuration if provided
             if config.model_path:
                 agent_engine_args["model_path"] = config.model_path
@@ -204,6 +211,7 @@ class MultiAgentExecutionEngine:
                 engine_name=self.engine_name,
                 tokenizer=self.tokenizer,
                 rollout_engine=self.rollout_engine,  # Shared rollout engine with router
+                config=self.config,
                 agent_class=config.agent_class,
                 agent_args=config.agent_args,
                 env_class=self.env_class,
@@ -224,7 +232,7 @@ class MultiAgentExecutionEngine:
         for agent_id, engine in self.agent_engines.items():
             # Each agent engine gets a copy of environments for the batch
             agent_envs = [env for env in envs]  # Could be shared or copied based on thread safety
-            agent_agents = [engine.agent_class(**engine.agent_args) for _ in envs]
+            agent_agents = [engine.agent_class(agent_id=agent_id, **engine.agent_args) for _ in envs]
             engine.update_envs_and_agents(agent_envs, agent_agents)
     
     def execute_chain_of_experts_batch(
@@ -251,7 +259,13 @@ class MultiAgentExecutionEngine:
             meta_info = {}
         
         batch_size = len(self.envs)
-        colorful_print(f"Executing Chain of Experts on batch of size {batch_size}", "cyan")
+        
+        # Reduce logging verbosity during validation
+        is_validation = meta_info.get("validate", False)
+        if not is_validation:
+            colorful_print(f"\n{'='*80}", "cyan")
+            colorful_print(f"🔗 CHAIN OF EXPERTS EXECUTION - Batch Size: {batch_size}", "cyan")
+            colorful_print(f"{'='*80}", "cyan")
         
         # Execute trajectories step-by-step through the chain
         return self._execute_chain_trajectories_step_by_step(timing_raw, meta_info)
@@ -267,6 +281,9 @@ class MultiAgentExecutionEngine:
         """
         batch_size = len(self.envs)
         workflow_results = []
+        
+        # Check if this is validation to control logging verbosity
+        is_validation = meta_info.get("validate", False)
         
         # Initialize trajectories for each batch item
         batch_trajectories = []
@@ -308,7 +325,13 @@ class MultiAgentExecutionEngine:
             if all(episodes_done):
                 break
                 
-            colorful_print(f"Executing chain step {step_num + 1}/{max_steps}", "yellow")
+            # Only log every 5th step during validation to reduce verbosity
+            if not is_validation or step_num % 5 == 0:
+                if not is_validation:
+                    colorful_print(f"\n🔄 ENVIRONMENT STEP {step_num + 1}/{max_steps}", "yellow")
+                    colorful_print(f"{'─'*60}", "yellow")
+                else:
+                    colorful_print(f"Executing chain step {step_num + 1}/{max_steps}", "yellow")
             
             # Process each active batch item through the chain
             for batch_idx in range(batch_size):
@@ -318,19 +341,33 @@ class MultiAgentExecutionEngine:
                 env = self.envs[batch_idx]
                 obs = observations[batch_idx]
                 
+                if not is_validation:
+                    colorful_print(f"\n  📋 Processing Batch Item {batch_idx + 1}/{batch_size}", "blue")
+                    colorful_print(f"     Current Observation: {str(obs)[:100]}{'...' if len(str(obs)) > 100 else ''}", "blue")
+                
                 # Execute the chain for this step
                 step_result = self._execute_chain_step(
                     batch_idx=batch_idx,
                     observation=obs,
                     step_num=step_num,
-                    timing_raw=timing_raw
+                    timing_raw=timing_raw,
+                    is_validation=is_validation
                 )
                 
                 # Apply final action to environment
                 final_action = step_result["final_action"]
                 try:
                     action_value = self._parse_action_from_response(final_action)
+                    
+                    if not is_validation:
+                        colorful_print(f"     🎯 Final Action: {final_action[:150]}{'...' if len(final_action) > 150 else ''}", "green")
+                        colorful_print(f"     🎮 Parsed Action Value: {action_value}", "green")
+                    
                     next_obs, reward, done, info = env.step(action_value)
+                    
+                    if not is_validation:
+                        colorful_print(f"     🏆 Environment Reward: {reward}", "green")
+                        colorful_print(f"     ✅ Episode Done: {done}", "green")
                     
                     # Update trajectory
                     step_result["reward"] = reward
@@ -359,7 +396,13 @@ class MultiAgentExecutionEngine:
                     
                     if done or env.finished():
                         episodes_done[batch_idx] = True
-                        colorful_print(f"Episode {batch_idx} completed with reward {batch_trajectories[batch_idx]['episode_reward']}", "green")
+                        if not is_validation:
+                            episode_reward = batch_trajectories[batch_idx]['episode_reward']
+                            episode_length = batch_trajectories[batch_idx]['episode_length']
+                            colorful_print(f"\n  🎉 EPISODE {batch_idx + 1} COMPLETED!", "green")
+                            colorful_print(f"     📊 Total Reward: {episode_reward}", "green")
+                            colorful_print(f"     📏 Episode Length: {episode_length} steps", "green")
+                            colorful_print(f"     {'─'*50}", "green")
                     else:
                         observations[batch_idx] = next_obs
                         
@@ -370,6 +413,32 @@ class MultiAgentExecutionEngine:
         for trajectory in batch_trajectories:
             workflow_results.append(self._format_trajectory_for_training(trajectory))
         
+        # Print comprehensive summary for training batches
+        if not is_validation:
+            rewards = [traj["episode_reward"] for traj in batch_trajectories]
+            lengths = [traj["episode_length"] for traj in batch_trajectories]
+            completed_episodes = sum(1 for done in episodes_done if done)
+            
+            colorful_print(f"\n{'='*80}", "cyan")
+            colorful_print(f"🏁 CHAIN OF EXPERTS BATCH SUMMARY", "cyan")
+            colorful_print(f"{'='*80}", "cyan")
+            colorful_print(f"📈 Episodes Completed: {completed_episodes}/{batch_size}", "white")
+            colorful_print(f"🏆 Rewards: {rewards}", "white")
+            colorful_print(f"📏 Episode Lengths: {lengths}", "white")
+            if rewards:
+                avg_reward = sum(rewards) / len(rewards)
+                avg_length = sum(lengths) / len(lengths)
+                colorful_print(f"📊 Average Reward: {avg_reward:.3f}", "white")
+                colorful_print(f"📊 Average Length: {avg_length:.1f} steps", "white")
+            colorful_print(f"{'='*80}\n", "cyan")
+        
+        # Print validation summary instead of individual episode logs
+        elif is_validation and batch_size > 1:
+            rewards = [traj["episode_reward"] for traj in batch_trajectories]
+            completed_episodes = sum(1 for done in episodes_done if done)
+            avg_reward = sum(rewards) / len(rewards) if rewards else 0.0
+            colorful_print(f"Validation batch completed: {completed_episodes}/{batch_size} episodes, avg reward: {avg_reward:.3f}", "cyan")
+        
         return workflow_results
     
     def _execute_chain_step(
@@ -377,7 +446,8 @@ class MultiAgentExecutionEngine:
         batch_idx: int, 
         observation: Any, 
         step_num: int,
-        timing_raw: Dict[str, Any]
+        timing_raw: Dict[str, Any],
+        is_validation: bool
     ) -> Dict[str, Any]:
         """
         Execute one step of the workflow following the DAG connections.
@@ -387,27 +457,63 @@ class MultiAgentExecutionEngine:
         """
         chain_responses = {}
         
+        if not is_validation:
+            colorful_print(f"\n    🔗 CHAIN EXECUTION FOR STEP {step_num + 1}", "magenta")
+            colorful_print(f"    {'─'*50}", "magenta")
+        
         # Execute each phase in the workflow sequentially
         for phase_idx, phase in enumerate(self.workflow_phases):
             phase_id = phase.phase_id
+            agent_id = phase.agent_ids[0]  # For Chain of Experts, each phase has exactly one agent
             
-            with timing_raw.get(f"{phase_id}_phase", {}):
+            if not is_validation:
+                colorful_print(f"\n      🤖 AGENT {phase_idx + 1}/{len(self.workflow_phases)}: {agent_id.upper()}", "cyan")
+                colorful_print(f"      {'·'*40}", "cyan")
+            
+            with _timer(f"{phase_id}_phase", timing_raw):
                 # For Chain of Experts, each phase has exactly one agent
-                agent_id = phase.agent_ids[0]
                 engine = self.agent_engines[agent_id]
                 agent = engine.agents[batch_idx] if batch_idx < len(engine.agents) else engine.agents[0]
                 
+                # Update agent with current observation
                 agent.update_from_env(observation, 0.0, False, {})
                 
+                # Prepare context from previous agents
                 agent_context = self._prepare_agent_context(agent_id, chain_responses)
+                
+                if not is_validation:
+                    # Show what the agent receives as input
+                    if agent_context:
+                        colorful_print(f"      📥 Input Context (from previous agents):", "white")
+                        context_preview = agent_context[:200] + "..." if len(agent_context) > 200 else agent_context
+                        colorful_print(f"         {context_preview}", "white")
+                    else:
+                        colorful_print(f"      📥 Input Context: [First agent - no previous context]", "white")
+                    
+                    # Show the agent's current prompt/state
+                    if hasattr(agent, 'chat_completions') and agent.chat_completions:
+                        current_prompt = str(agent.chat_completions)[:300] + "..." if len(str(agent.chat_completions)) > 300 else str(agent.chat_completions)
+                        colorful_print(f"      💭 Agent Current State: {current_prompt}", "white")
+                
+                # Set collaboration context if agent supports it
                 if hasattr(agent, 'collaboration_prompt'):
                     agent.collaboration_prompt = agent_context
                 
+                # Get agent response
                 agent_response = self._get_agent_response(agent, engine)
                 chain_responses[agent_id] = agent_response
+                
+                if not is_validation:
+                    # Show the agent's response
+                    response_preview = agent_response[:300] + "..." if len(agent_response) > 300 else agent_response
+                    colorful_print(f"      📤 Agent Response: {response_preview}", "yellow")
         
         final_agent_id = self.workflow_phases[-1].agent_ids[0]
         final_action = chain_responses[final_agent_id]
+        
+        if not is_validation:
+            colorful_print(f"\n    ✨ CHAIN COMPLETED - Final Decision from {final_agent_id.upper()}", "magenta")
+            colorful_print(f"    {'─'*50}", "magenta")
         
         return {
             "step": step_num,
@@ -441,7 +547,8 @@ class MultiAgentExecutionEngine:
                     agent_name = source_agent.replace("_", " ").title()
                     context_parts.append(f"{agent_name} Analysis:\n{source_response}")
         
-        return "\n\n".join(context_parts)
+        final_context = "\n\n".join(context_parts)
+        return final_context
     
     def _get_agent_response(self, agent: BaseAgent, engine: AgentExecutionEngine) -> str:
         """
