@@ -28,13 +28,13 @@ class MultiAgentBase(BaseAgent):
         # Add system prompt
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
-        
+
         # Add Chain of Experts context if available
         if self.multi_agent_context:
             context_content = self._format_multi_agent_context()
             if context_content:
                 messages.append({"role": "system", "content": context_content})
-        
+
         # Add conversation history
         for step in self._trajectory.steps:
             if step.observation:

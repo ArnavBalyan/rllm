@@ -53,18 +53,20 @@ class WorkflowConnection:
 
 
 @dataclass
-class WorkflowStep:
+class WorkflowPhase:
     """
     Represents a logical execution phase in the multi-agent workflow.
     
-    A step is a collection of agents that execute together in a specific mode:
-    - For Chain of Experts: each step contains exactly one agent
-    - The step defines HOW agents execute (sequential/parallel) and WHICH agents participate
+    A phase is a collection of agents that execute together in a specific mode:
+    - For Chain of Experts: each phase contains exactly one agent
+    - The phase defines HOW agents execute (sequential/parallel) and WHICH agents participate
+    
+    Note: This is different from a "step" which refers to one turn of conversation/action.
     """
-    step_id: str
-    agent_ids: List[str]  # Agents that participate in this step
+    phase_id: str
+    agent_ids: List[str]  # Agents that participate in this phase
     execution_mode: str = "sequential"  # "sequential" for Chain of Experts
-    description: Optional[str] = None  # Human-readable description of what this step does
+    description: Optional[str] = None  # Human-readable description of what this phase does
 
 
 class BaseWorkflow(ABC):
@@ -74,21 +76,21 @@ class BaseWorkflow(ABC):
         self.workflow_id = workflow_id
         self.agent_configs: Dict[str, AgentConfig] = {}
         self.connections: List[WorkflowConnection] = []
-        self.steps: List[WorkflowStep] = []
+        self.phases: List[WorkflowPhase] = []
     
     @abstractmethod
-    def define_workflow(self) -> Tuple[List[AgentConfig], List[WorkflowStep], List[WorkflowConnection]]:
+    def define_workflow(self) -> Tuple[List[AgentConfig], List[WorkflowPhase], List[WorkflowConnection]]:
         """
         Define the workflow structure.
         
         Returns:
-            Tuple of (agent_configs, workflow_steps, connections)
+            Tuple of (agent_configs, workflow_phases, connections)
         """
         pass
     
     @abstractmethod
-    def process_step_output(self, step_outputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Process outputs from a workflow step"""
+    def process_phase_output(self, phase_outputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Process outputs from a workflow phase"""
         pass
 
 
@@ -104,9 +106,9 @@ class ChainOfExpertsWorkflow(BaseWorkflow):
         super().__init__("chain_of_experts")
         self.agent_configs_list = agent_configs
     
-    def define_workflow(self) -> Tuple[List[AgentConfig], List[WorkflowStep], List[WorkflowConnection]]:
+    def define_workflow(self) -> Tuple[List[AgentConfig], List[WorkflowPhase], List[WorkflowConnection]]:
         connections = []
-        steps = []
+        phases = []
         
         # Create sequential connections (Agent A → Agent B → Agent C)
         for i in range(len(self.agent_configs_list) - 1):
@@ -115,31 +117,30 @@ class ChainOfExpertsWorkflow(BaseWorkflow):
                 to_agent=self.agent_configs_list[i + 1].agent_id
             ))
         
-        # Create sequential steps (each step contains exactly one agent)
+        # Create sequential phases (each phase contains exactly one agent)
         for i, config in enumerate(self.agent_configs_list):
-            steps.append(WorkflowStep(
-                step_id=f"step_{i}",
+            phases.append(WorkflowPhase(
+                phase_id=f"phase_{i}",
                 agent_ids=[config.agent_id],
                 execution_mode="sequential",
                 description=f"Execute {config.role.value} agent: {config.agent_id}"
             ))
         
-        return self.agent_configs_list, steps, connections
+        return self.agent_configs_list, phases, connections
     
-    def process_step_output(self, step_outputs: Dict[str, Any]) -> Dict[str, Any]:
+    def process_phase_output(self, phase_outputs: Dict[str, Any]) -> Dict[str, Any]:
         """For chain of experts, pass output directly to next agent"""
-        return step_outputs
+        return phase_outputs
 
 
 class MultiAgentExecutionEngine:
     """
-    Enhanced execution engine for multi-agent workflows.
+    Simplified execution engine for Chain of Experts training.
     
-    Architecture:
-    - Creates individual AgentExecutionEngine instances for each agent
-    - Each agent can have its own vLLM instance/shard via the router
-    - Orchestrates sequential/parallel execution according to workflow definition
-    - Integrates with existing rLLM async infrastructure
+    Processes a single batch through sequential phases of the Chain of Experts:
+    - Phase 0: Proposer processes batch → outputs
+    - Phase 1: Expert processes batch with Proposer context → outputs  
+    - Phase 2: Judge processes batch with Expert context → final outputs
     """
     
     def __init__(
@@ -147,10 +148,9 @@ class MultiAgentExecutionEngine:
         workflow: BaseWorkflow,
         env_class: type,
         env_args: Dict[str, Any] = None,
-        engine_name: str = "openai",
+        engine_name: str = "verl",
         tokenizer=None,
         rollout_engine=None,
-        n_parallel_workflows: int = 1,
         trajectory_timeout: Optional[int] = None,
         max_workers: int = 64,
         **kwargs
@@ -161,24 +161,20 @@ class MultiAgentExecutionEngine:
         self.engine_name = engine_name
         self.tokenizer = tokenizer
         self.rollout_engine = rollout_engine
-        self.n_parallel_workflows = n_parallel_workflows
         self.trajectory_timeout = trajectory_timeout or int(1e9)
         self.max_workers = max_workers
         self.kwargs = kwargs
         
         # Initialize workflow structure
-        self.agent_configs, self.workflow_steps, self.connections = workflow.define_workflow()
+        self.agent_configs, self.workflow_phases, self.connections = workflow.define_workflow()
         
         # Create individual agent execution engines for each agent type
         # Each agent gets its own engine which can connect to separate vLLM instances
         self.agent_engines: Dict[str, AgentExecutionEngine] = {}
         self._initialize_agent_engines()
         
-        # Environment instances for each workflow
+        # Environment instances for the batch
         self.envs: List[BaseEnv] = []
-        
-        # Workflow state tracking
-        self.workflow_states: Dict[str, Dict] = {}
     
     def _initialize_agent_engines(self):
         """
@@ -221,277 +217,354 @@ class MultiAgentExecutionEngine:
             )
     
     def update_envs_and_agents(self, envs: List[BaseEnv]):
-        """Update environment instances for workflows"""
+        """Update environment instances for the training batch"""
         self.envs = envs
         
         # Distribute environments to agent engines
         for agent_id, engine in self.agent_engines.items():
-            # Each agent engine gets a copy of environments
+            # Each agent engine gets a copy of environments for the batch
             agent_envs = [env for env in envs]  # Could be shared or copied based on thread safety
             agent_agents = [engine.agent_class(**engine.agent_args) for _ in envs]
             engine.update_envs_and_agents(agent_envs, agent_agents)
     
-    async def execute_multi_agent_trajectory(
+    def execute_chain_of_experts_batch(
         self, 
-        workflow_idx: int, 
-        application_id: str, 
-        seed: int = 0, 
-        mode: str = "Text",
-        **kwargs
-    ) -> Dict[str, Any]:
+        timing_raw: Dict[str, Any] = None, 
+        meta_info: Dict[str, Any] = None
+    ) -> List[Dict[str, Any]]:
         """
-        Execute a complete multi-agent workflow trajectory.
+        Execute Chain of Experts on a training batch.
         
-        For Chain of Experts:
-        1. Execute Step 0: Proposer agent
-        2. Execute Step 1: Expert agent (receives Proposer output as context)
-        3. Execute Step 2: Critic agent (receives Expert output as context)
-        4. Execute Step 3: Judge agent (receives Critic output as context)
+        - Step 1: Proposer → Expert → Judge → Environment.step() → reward
+        - Step 2: Proposer → Expert → Judge → Environment.step() → reward  
+        - Step 3: Proposer → Expert → Judge → Environment.step() → reward
+        - ... until episode done
+        
+        Each environment step goes through the complete chain sequentially.
+        
+        Returns:
+            List of workflow results for each item in the batch
         """
+        if timing_raw is None:
+            timing_raw = {}
+        if meta_info is None:
+            meta_info = {}
         
-        workflow_id = f"{application_id}_workflow_{workflow_idx}"
-        self.workflow_states[workflow_id] = {
-            "step_outputs": {},
-            "agent_trajectories": {},
-            "current_step": 0,
-            "start_time": time.time()
-        }
+        batch_size = len(self.envs)
+        colorful_print(f"Executing Chain of Experts on batch of size {batch_size}", "cyan")
         
-        try:
-            # Execute each step in the workflow sequentially
-            for step_idx, step in enumerate(self.workflow_steps):
-                colorful_print(f"Executing workflow step {step_idx}: {step.step_id} - {step.description}", "cyan")
+        # Execute trajectories step-by-step through the chain
+        return self._execute_chain_trajectories_step_by_step(timing_raw, meta_info)
+    
+    def _execute_chain_trajectories_step_by_step(
+        self, 
+        timing_raw: Dict[str, Any], 
+        meta_info: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute Chain of Experts trajectories step-by-step.        
+        This ensures proper sequential chain execution per RL step.
+        """
+        batch_size = len(self.envs)
+        workflow_results = []
+        
+        # Initialize trajectories for each batch item
+        batch_trajectories = []
+        for batch_idx in range(batch_size):
+            # Create agent trajectories dynamically based on workflow
+            agent_trajectories = {}
+            for agent_config in self.agent_configs:
+                agent_trajectories[agent_config.agent_id] = {
+                    "steps": [], 
+                    "total_reward": 0.0
+                }
+            
+            trajectory = {
+                "workflow_type": self.workflow.workflow_id,
+                "batch_idx": batch_idx,
+                "steps": [],  # List of chain steps
+                "agent_trajectories": agent_trajectories,
+                "episode_reward": 0.0,
+                "episode_length": 0,
+            }
+            batch_trajectories.append(trajectory)
+        
+        # Reset all environments
+        observations = []
+        for batch_idx, env in enumerate(self.envs):
+            obs, info = env.reset()
+            observations.append(obs)
+        
+        # Reset all agents
+        for engine in self.agent_engines.values():
+            for agent in engine.agents:
+                agent.reset()
+        
+        # Execute episodes step by step
+        episodes_done = [False] * batch_size
+        max_steps = self.agent_configs[0].agent_args.get("max_steps", 10)  # Get from agent config
+        
+        for step_num in range(max_steps):
+            if all(episodes_done):
+                break
                 
-                step_output = await self._execute_workflow_step(
-                    workflow_id, step, workflow_idx, application_id, seed, mode, **kwargs
+            colorful_print(f"Executing chain step {step_num + 1}/{max_steps}", "yellow")
+            
+            # Process each active batch item through the chain
+            for batch_idx in range(batch_size):
+                if episodes_done[batch_idx]:
+                    continue
+                    
+                env = self.envs[batch_idx]
+                obs = observations[batch_idx]
+                
+                # Execute the chain for this step
+                step_result = self._execute_chain_step(
+                    batch_idx=batch_idx,
+                    observation=obs,
+                    step_num=step_num,
+                    timing_raw=timing_raw
                 )
                 
-                self.workflow_states[workflow_id]["step_outputs"][step.step_id] = step_output
-                self.workflow_states[workflow_id]["current_step"] = step_idx + 1
-            
-            # Process final workflow output
-            final_output = self._process_workflow_completion(workflow_id)
-            
-            return final_output
-            
-        except Exception as e:
-            logger.error(f"Error in workflow {workflow_id}: {str(e)}")
-            traceback.print_exc()
-            raise e
-        finally:
-            # Cleanup workflow state
-            if workflow_id in self.workflow_states:
-                del self.workflow_states[workflow_id]
+                # Apply final action to environment
+                final_action = step_result["final_action"]
+                try:
+                    action_value = self._parse_action_from_response(final_action)
+                    next_obs, reward, done, info = env.step(action_value)
+                    
+                    # Update trajectory
+                    step_result["reward"] = reward
+                    step_result["done"] = done
+                    step_result["next_observation"] = next_obs
+                    
+                    batch_trajectories[batch_idx]["steps"].append(step_result)
+                    batch_trajectories[batch_idx]["episode_reward"] += reward
+                    batch_trajectories[batch_idx]["episode_length"] += 1
+                    
+                    for agent_config in self.agent_configs:
+                        agent_id = agent_config.agent_id
+                        if agent_id in step_result["chain_responses"]:
+
+                            final_agent_id = self.workflow_phases[-1].agent_ids[0]
+                            reward_for_agent = reward if agent_id == final_agent_id else 0.0
+                            
+                            batch_trajectories[batch_idx]["agent_trajectories"][agent_id]["steps"].append({
+                                "step": step_num,
+                                "response": step_result["chain_responses"][agent_id],
+                                "reward": reward_for_agent,
+                            })
+                            
+                            if agent_id == final_agent_id:
+                                batch_trajectories[batch_idx]["agent_trajectories"][agent_id]["total_reward"] += reward
+                    
+                    if done or env.finished():
+                        episodes_done[batch_idx] = True
+                        colorful_print(f"Episode {batch_idx} completed with reward {batch_trajectories[batch_idx]['episode_reward']}", "green")
+                    else:
+                        observations[batch_idx] = next_obs
+                        
+                except Exception as e:
+                    logger.error(f"Error in chain step for batch {batch_idx}: {str(e)}")
+                    episodes_done[batch_idx] = True
+        
+        for trajectory in batch_trajectories:
+            workflow_results.append(self._format_trajectory_for_training(trajectory))
+        
+        return workflow_results
     
-    async def _execute_workflow_step(
-        self,
-        workflow_id: str,
-        step: WorkflowStep,
-        workflow_idx: int,
-        application_id: str,
-        seed: int,
-        mode: str,
-        **kwargs
+    def _execute_chain_step(
+        self, 
+        batch_idx: int, 
+        observation: Any, 
+        step_num: int,
+        timing_raw: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Execute a single workflow step.
+        Execute one step of the workflow following the DAG connections.
         
-        For Chain of Experts, this executes exactly one agent sequentially.
+        Uses the workflow phases and connections to dynamically execute agents
+        in the correct order based on the workflow definition.
         """
+        chain_responses = {}
         
-        if step.execution_mode == "sequential":
-            return await self._execute_sequential_step(
-                workflow_id, step, workflow_idx, application_id, seed, mode, **kwargs
-            )
-        else:
-            raise ValueError(f"Unknown execution mode: {step.execution_mode}")
-    
-    async def _execute_sequential_step(
-        self,
-        workflow_id: str,
-        step: WorkflowStep,
-        workflow_idx: int,
-        application_id: str,
-        seed: int,
-        mode: str,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        Execute agents sequentially within a step.
-        
-        For Chain of Experts, each step has exactly one agent.
-        """
-        step_outputs = {}
-        
-        for agent_id in step.agent_ids:
-            # Prepare input for this agent based on previous steps
-            agent_input = self._prepare_agent_input(workflow_id, agent_id)
+        # Execute each phase in the workflow sequentially
+        for phase_idx, phase in enumerate(self.workflow_phases):
+            phase_id = phase.phase_id
             
-            # Execute agent using its dedicated AgentExecutionEngine
-            agent_output = await self._execute_single_agent(
-                agent_id, workflow_idx, application_id, seed, mode, agent_input, **kwargs
-            )
-            
-            step_outputs[agent_id] = agent_output
-            
-            # Store agent trajectory
-            self.workflow_states[workflow_id]["agent_trajectories"][agent_id] = agent_output
+            with timing_raw.get(f"{phase_id}_phase", {}):
+                # For Chain of Experts, each phase has exactly one agent
+                agent_id = phase.agent_ids[0]
+                engine = self.agent_engines[agent_id]
+                agent = engine.agents[batch_idx] if batch_idx < len(engine.agents) else engine.agents[0]
+                
+                agent.update_from_env(observation, 0.0, False, {})
+                
+                agent_context = self._prepare_agent_context(agent_id, chain_responses)
+                if hasattr(agent, 'collaboration_prompt'):
+                    agent.collaboration_prompt = agent_context
+                
+                agent_response = self._get_agent_response(agent, engine)
+                chain_responses[agent_id] = agent_response
         
-        return step_outputs
+        final_agent_id = self.workflow_phases[-1].agent_ids[0]
+        final_action = chain_responses[final_agent_id]
+        
+        return {
+            "step": step_num,
+            "observation": observation,
+            "chain_responses": chain_responses,
+            "final_action": final_action,
+        }
     
-    async def _execute_single_agent(
-        self,
-        agent_id: str,
-        workflow_idx: int,
-        application_id: str,
-        seed: int,
-        mode: str,
-        agent_input: Dict[str, Any],
-        **kwargs
-    ) -> Dict[str, Any]:
+    def _prepare_agent_context(self, agent_id: str, previous_responses: Dict[str, str]) -> str:
         """
-        Execute a single agent with given input.
+        Prepare context for an agent based on workflow connections.
         
-        This uses the agent's dedicated AgentExecutionEngine which:
-        - Connects to the appropriate vLLM instance via router
-        - Handles async execution
-        - Manages the agent's environment interaction
+        Finds all incoming connections to this agent and formats the context
+        from previous agents' responses.
         """
-        
-        engine = self.agent_engines[agent_id]
-        
-        # Update agent's environment with the input from previous agents
-        env = engine.envs[workflow_idx]
-        agent = engine.agents[workflow_idx]
-        
-        # Reset environment and agent with the input from previous agents
-        if agent_input:
-            # Custom reset with input from previous agents in chain
-            observation, info = await asyncio.get_event_loop().run_in_executor(
-                engine.executor, lambda: env.reset() if not hasattr(env, 'reset_with_input') 
-                else env.reset_with_input(agent_input)
-            )
-        else:
-            observation, info = await asyncio.get_event_loop().run_in_executor(
-                engine.executor, env.reset
-            )
-        
-        agent.reset()
-        
-        # Execute the agent trajectory using existing async infrastructure
-        trajectory_result = await engine.run_agent_trajectory_async(
-            workflow_idx, application_id, seed, mode, **kwargs
-        )
-        
-        return trajectory_result
-    
-    def _prepare_agent_input(self, workflow_id: str, agent_id: str) -> Dict[str, Any]:
-        """
-        Prepare input for an agent based on previous workflow steps.
-        
-        For Chain of Experts:
-        - First agent gets no input (starts fresh)
-        - Subsequent agents get the output from the previous agent as context
-        """
+        context_parts = []
         
         # Find incoming connections to this agent
-        incoming_data = {}
-        
         for connection in self.connections:
             if connection.to_agent == agent_id:
                 source_agent = connection.from_agent
                 
-                # Find the output from source agent in previous steps
-                for step_id, step_output in self.workflow_states[workflow_id]["step_outputs"].items():
-                    if source_agent in step_output:
-                        data = step_output[source_agent]
-                        
-                        # Apply transformation if provided
-                        if connection.transform_fn:
-                            data = connection.transform_fn(data)
-                        
-                        incoming_data[source_agent] = data
+                if source_agent in previous_responses:
+                    source_response = previous_responses[source_agent]
+                    
+                    # Apply transformation if provided
+                    if connection.transform_fn:
+                        source_response = connection.transform_fn(source_response)
+                    
+                    # Format the context nicely
+                    agent_name = source_agent.replace("_", " ").title()
+                    context_parts.append(f"{agent_name} Analysis:\n{source_response}")
         
-        return incoming_data
+        return "\n\n".join(context_parts)
     
-    def _process_workflow_completion(self, workflow_id: str) -> Dict[str, Any]:
-        """Process the completion of a workflow"""
+    def _get_agent_response(self, agent: BaseAgent, engine: AgentExecutionEngine) -> str:
+        """
+        Get a single response from an agent using the engine's rollout system.
         
-        state = self.workflow_states[workflow_id]
-        total_time = time.time() - state["start_time"]
+        This is a simplified version that gets one response per agent per step.
+        """
+        # For now, use a placeholder - in real implementation, this would:
+        # 1. Convert agent.chat_completions to tokens
+        # 2. Send to rollout_engine for generation  
+        # 3. Parse response and update agent
+        # 4. Return the agent's action response
         
-        # Get final outputs (from the last step)
-        final_step_outputs = list(state["step_outputs"].values())[-1] if state["step_outputs"] else {}
+        # Placeholder implementation
+        import random
+        actions = ["Up", "Down", "Left", "Right"]
+        agent_name = agent.__class__.__name__.replace("FrozenLake", "").replace("Agent", "")
         
-        # Compute workflow-level metrics
-        workflow_result = {
-            "workflow_id": workflow_id,
-            "workflow_type": self.workflow.workflow_id,
-            "total_time": total_time,
-            "steps_completed": state["current_step"],
-            "final_outputs": final_step_outputs,
-            "agent_trajectories": state["agent_trajectories"],
-            "step_outputs": state["step_outputs"]
+        # Simulate agent thinking and action selection
+        action = random.choice(actions)
+        response = f"[{agent_name} thinking] I need to analyze the board and choose the best move. Action: ```{action}```"
+        
+        # Update agent with this response
+        try:
+            agent.update_from_model(response)
+        except:
+            pass  # Handle any update errors gracefully
+            
+        return response
+    
+    def _parse_action_from_response(self, response: str) -> int:
+        """
+        Parse the final action from Judge's response.
+        
+        Expects action in the format: ```Up``` or ```Down``` etc.
+        Returns integer action value for FrozenLake environment.
+        """
+        import re
+        
+        # Extract action from ```action``` format
+        action_match = re.search(r'```(\w+)```', response)
+        if action_match:
+            action_str = action_match.group(1).strip().lower()
+            
+            # Map to FrozenLake action values
+            action_mapping = {
+                "left": 1,
+                "down": 2, 
+                "right": 3,
+                "up": 4,
+            }
+            
+            return action_mapping.get(action_str, 1)  # Default to left if parsing fails
+        
+        # Fallback if no action found
+        logger.warning(f"Could not parse action from response: {response}")
+        return 1  # Default action
+    
+    def _format_trajectory_for_training(self, trajectory: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Format the chain trajectory for PPO training.
+        
+        The training expects specific format with tokens, rewards, etc.
+        """
+        final_agent_id = self.workflow_phases[-1].agent_ids[0]
+        final_agent_trajectory = trajectory["agent_trajectories"][final_agent_id]
+        
+        formatted = {
+            "workflow_type": trajectory["workflow_type"],
+            "batch_idx": trajectory["batch_idx"],
+            "agent_trajectories": {
+                final_agent_id: {  
+                    "prompt_tokens": torch.tensor([1, 2, 3]),  # Placeholder - should be real tokens
+                    "response_tokens": torch.tensor([4, 5, 6]),  # Placeholder - should be real tokens
+                    "response_masks": torch.tensor([1, 1, 1]),  # Placeholder
+                    "trajectory_reward": final_agent_trajectory["total_reward"],
+                    "chat_completions": [],  # Should contain actual chat history
+                    "metrics": {
+                        "episode_length": trajectory["episode_length"],
+                        "episode_reward": trajectory["episode_reward"],
+                    },
+                }
+            },
+            "phase_outputs": {},  # Legacy format compatibility
         }
         
-        # Apply workflow-specific processing
-        processed_result = self.workflow.process_step_output(workflow_result)
-        
-        return processed_result
+        return formatted
     
-    async def execute_multi_agent_workflows(self, tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Execute multiple multi-agent workflows in parallel"""
+    def _prepare_batch_item_context(
+        self, 
+        batch_idx: int, 
+        agent_id: str, 
+        previous_phase_outputs: Dict[str, List[Dict]]
+    ) -> Dict[str, Any]:
+        """
+        Prepare context for a specific batch item and agent based on previous phases.
         
-        max_concurrent = self.n_parallel_workflows
-        all_results = {}
+        Args:
+            batch_idx: Index of the item in the batch
+            agent_id: Current agent ID
+            previous_phase_outputs: Outputs from previous phases
+            
+        Returns:
+            Context dict for this batch item and agent
+        """
+        context = {}
         
-        # Create task queue
-        task_queue = list(enumerate(tasks))
-        semaphore = asyncio.Semaphore(max_concurrent)
+        # Find incoming connections to this agent
+        for connection in self.connections:
+            if connection.to_agent == agent_id:
+                source_agent = connection.from_agent
+                
+                # Find the output from source agent in previous phases
+                for phase_id, phase_batch_outputs in previous_phase_outputs.items():
+                    if batch_idx < len(phase_batch_outputs):
+                        phase_output = phase_batch_outputs[batch_idx]
+                        if source_agent in phase_output:
+                            data = phase_output[source_agent]
+                            
+                            # Apply transformation if provided
+                            if connection.transform_fn:
+                                data = connection.transform_fn(data)
+                            
+                            context[source_agent] = data
         
-        # Track completed workflows
-        completed = 0
-        total = len(tasks)
-        
-        async def workflow_wrapper(task_id: int, task: Dict[str, Any]):
-            nonlocal completed
-            async with semaphore:
-                try:
-                    # Initialize environment for this workflow
-                    env = self.env_class.from_dict({**self.env_args, **task})
-                    
-                    # Execute workflow
-                    application_id = str(uuid.uuid4())
-                    result = await self.execute_multi_agent_trajectory(
-                        workflow_idx=task_id,
-                        application_id=application_id,
-                        seed=task.get("seed", 0)
-                    )
-                    
-                    result["task_id"] = task_id
-                    result["task"] = task
-                    
-                    completed += 1
-                    colorful_print(f"Multi-agent workflows {completed}/{total} completed", "cyan")
-                    
-                    return task_id, result
-                    
-                except Exception as e:
-                    logger.error(f"Error in workflow {task_id}: {str(e)}")
-                    traceback.print_exc()
-                    raise e
-        
-        # Create all workflow tasks
-        workflow_tasks = [workflow_wrapper(task_id, task) for task_id, task in task_queue]
-        
-        # Execute all workflows
-        for coro in asyncio.as_completed(workflow_tasks):
-            try:
-                task_id, result = await coro
-                all_results[task_id] = result
-            except Exception as e:
-                logger.error(f"Workflow execution failed: {str(e)}")
-                raise e
-        
-        # Return results in original order
-        return [all_results[i] for i in range(len(tasks))] 
+        return context 

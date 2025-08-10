@@ -36,50 +36,56 @@ The Chain of Experts system extends rLLM's single-agent architecture to support 
 
 ## Key Components
 
-### 1. WorkflowStep Definition
+### 1. WorkflowPhase Definition
 
-A `WorkflowStep` represents a **logical execution phase** in the Chain of Experts:
+A `WorkflowPhase` represents a **logical execution phase** in the Chain of Experts:
 
 ```python
 @dataclass
-class WorkflowStep:
+class WorkflowPhase:
     """
     Represents a logical execution phase in the multi-agent workflow.
     
     For Chain of Experts:
-    - Each step contains exactly ONE agent
-    - Steps execute sequentially (Agent A → Agent B → Agent C)
-    - Each step defines WHAT agent executes and HOW it receives context
+    - Each phase contains exactly ONE agent
+    - Phases execute sequentially (Agent A → Agent B → Agent C)
+    - Each phase defines WHAT agent executes and HOW it receives context
+    
+    Note: This is different from a "step" which refers to one turn of conversation/action.
     """
-    step_id: str                    # Unique identifier (e.g., "step_0", "step_1")
+    phase_id: str                   # Unique identifier (e.g., "phase_0", "phase_1")
     agent_ids: List[str]            # List with exactly one agent ID for CoE
     execution_mode: str = "sequential"  # Always "sequential" for Chain of Experts
     description: Optional[str] = None   # Human-readable description
 ```
 
-**Example Chain of Experts Steps:**
+**Example Chain of Experts Phases:**
 ```python
-steps = [
-    WorkflowStep(
-        step_id="step_0",
+phases = [
+    WorkflowPhase(
+        phase_id="phase_0",
         agent_ids=["proposer"],
         execution_mode="sequential",
         description="Proposer analyzes problem and suggests initial approach"
     ),
-    WorkflowStep(
-        step_id="step_1", 
+    WorkflowPhase(
+        phase_id="phase_1", 
         agent_ids=["math_expert"],
         execution_mode="sequential",
         description="Math Expert receives Proposer output and applies mathematical knowledge"
     ),
-    WorkflowStep(
-        step_id="step_2",
+    WorkflowPhase(
+        phase_id="phase_2",
         agent_ids=["judge"],
         execution_mode="sequential", 
         description="Judge receives Math Expert output and makes final decision"
     )
 ]
 ```
+
+**Important Terminology:**
+- **Phase**: One agent's execution in the Chain of Experts (new concept)
+- **Step**: One conversation turn/action within an agent's execution (preserved from base rLLM)
 
 ### 2. Integration with rLLM Router
 
@@ -188,14 +194,14 @@ class MultiAgentExecutionEngine:
         
         Async Integration:
         1. Multiple workflows run in parallel (n_parallel_workflows)
-        2. Within each workflow, agents execute sequentially
+        2. Within each workflow, agents execute sequentially in phases
         3. Each agent uses async execution internally via AgentExecutionEngine
         """
         
-        # Sequential execution within the chain
-        for step in self.workflow_steps:
-            step_output = await self._execute_workflow_step(...)
-            # Pass output to next step as context
+        # Sequential execution within the chain (phase by phase)
+        for phase in self.workflow_phases:
+            phase_output = await self._execute_workflow_phase(...)
+            # Pass output to next phase as context
         
     async def _execute_single_agent(self, agent_id: str, ...):
         """
@@ -212,8 +218,9 @@ class MultiAgentExecutionEngine:
 
 **Async Execution Levels:**
 - **Workflow Level**: Multiple Chain of Experts workflows run in parallel
-- **Step Level**: Within each workflow, steps execute sequentially
+- **Phase Level**: Within each workflow, phases execute sequentially
 - **Agent Level**: Each agent uses async execution for vLLM interaction
+- **Step Level**: Within each agent, conversation steps use existing async patterns
 
 ### 5. Context Passing Mechanism
 
@@ -292,14 +299,14 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         Enhanced training loop that generates Chain of Experts trajectories.
         """
         for batch_dict in self.train_dataloader:
-            # Generate Chain of Experts trajectories
+            # Generate Chain of Experts trajectories across phases
             final_gen_batch_output, metrics = self.generate_multi_agent_trajectory(...)
             
             # Continue with standard PPO pipeline
             batch = batch.union(final_gen_batch_output)
             
             # Compute values, advantages, update actor/critic
-            # (same as single-agent training)
+            # (same as single-agent training on conversation steps)
 ```
 
 **Training Modes:**
@@ -310,6 +317,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
 - **"final_agent"**: Use reward from the final agent in the chain
 - **"average"**: Average rewards across all agents in the chain
 
+**Training Level Distinction:**
+- **Phase Level**: Chain of Experts orchestration (new concept)
+- **Step Level**: PPO training on conversation turns (preserved from base rLLM)
+
 ## Performance Considerations
 
 ### 1. Memory Distribution
@@ -318,9 +329,9 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
 - Memory usage scales linearly with number of agents
 
 ### 2. Latency Characteristics
-- Sequential execution within chain (inherent design)
+- Sequential execution within chain phases (inherent design)
 - Parallel execution across multiple chains
-- Context passing adds minimal overhead
+- Context passing adds minimal overhead between phases
 
 ### 3. Scalability
 ```python
@@ -375,4 +386,11 @@ chain_trainer = create_chain_of_experts_trainer(
 chain_trainer.fit_multi_agent()
 ```
 
-The Chain of Experts architecture provides a natural extension to rLLM's single-agent system while maintaining compatibility with existing infrastructure components. 
+## Summary
+
+The Chain of Experts architecture provides a natural extension to rLLM's single-agent system while maintaining compatibility with existing infrastructure components. The key innovation is the clear separation of concerns:
+
+- **Phases**: Sequential agent execution in the Chain of Experts (new multi-agent concept)
+- **Steps**: Conversation turns and actions within each agent (preserved rLLM semantics)
+
+This design ensures that existing rLLM components continue to work as expected while enabling powerful multi-agent collaboration patterns. 

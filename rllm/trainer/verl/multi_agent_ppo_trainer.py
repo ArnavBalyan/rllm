@@ -41,12 +41,15 @@ from verl.trainer.ppo.ray_trainer import (
 
 class MultiAgentPPOTrainer(AgentPPOTrainer):
     """
-    Enhanced PPO trainer for multi-agent workflows.
+    Enhanced PPO trainer for Chain of Experts training.
     
-    Currently supports Chain of Experts workflow where:
-    - Multiple agents execute sequentially 
-    - Each agent can use a separate vLLM instance via router
-    - Training can be done on unified trajectory or final agent only
+    Processes a single training batch through sequential phases:
+    - Phase 0: Proposer processes entire batch → outputs
+    - Phase 1: Expert processes batch with Proposer context → outputs  
+    - Phase 2: Judge processes batch with Expert context → final outputs
+    
+    Note: "phase" refers to one agent's execution in the chain,
+          "step" refers to one conversation turn/action (preserved from base rLLM)
     """
     
     def __init__(
@@ -112,7 +115,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 engine_name="verl",
                 tokenizer=self.tokenizer,
                 rollout_engine=rollout_engine,
-                n_parallel_workflows=self.config.actor_rollout_ref.rollout.n,
                 max_response_length=self.config.data.max_response_length,
                 max_prompt_length=self.config.data.max_prompt_length,
                 trajectory_timeout=self.config.agent.trajectory_timeout,
@@ -145,49 +147,25 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         self.multi_agent_engine.update_envs_and_agents(envs)
         return envs
     
-    def generate_multi_agent_trajectory(self, timing_raw=None, meta_info=None):
-        """Generate multi-agent trajectories for Chain of Experts"""
+    def generate_chain_of_experts_trajectories(self, timing_raw=None, meta_info=None):
+        """Generate Chain of Experts trajectories by processing batch through phases"""
         if timing_raw is None:
             timing_raw = {}
         
-        with _timer("collect_multi_agent_trajectory", timing_raw):
-            # Create tasks from environments
-            tasks = []
-            for i, env in enumerate(self.multi_agent_engine.envs):
-                task = {
-                    "idx": i,
-                    "seed": meta_info.get("seed", 0) + i if meta_info else i
-                }
-                # Add environment-specific task data if available
-                if hasattr(env, 'task_data'):
-                    task.update(env.task_data)
-                tasks.append(task)
-            
-            # Execute multi-agent workflows
-            if self.config.agent.async_engine:
-                workflow_results = asyncio.run(
-                    self.multi_agent_engine.execute_multi_agent_workflows(tasks)
-                )
-            else:
-                # Synchronous execution (simplified)
-                workflow_results = []
-                for task in tasks:
-                    result = asyncio.run(
-                        self.multi_agent_engine.execute_multi_agent_trajectory(
-                            workflow_idx=task["idx"],
-                            application_id=str(uuid.uuid4()),
-                            seed=task.get("seed", 0)
-                        )
-                    )
-                    workflow_results.append(result)
+        with _timer("collect_chain_of_experts_trajectories", timing_raw):
+            # Execute the batch through all phases of the Chain of Experts
+            workflow_results = self.multi_agent_engine.execute_chain_of_experts_batch(
+                timing_raw=timing_raw,
+                meta_info=meta_info
+            )
         
-        with _timer("transform_multi_agent_trajectory", timing_raw):
+        with _timer("transform_chain_of_experts_trajectories", timing_raw):
             # Transform multi-agent results into training format
-            final_gen_batch_output, metrics = self._transform_multi_agent_trajectories(workflow_results)
+            final_gen_batch_output, metrics = self._transform_chain_of_experts_trajectories(workflow_results)
         
         return final_gen_batch_output, metrics
     
-    def _transform_multi_agent_trajectories(self, workflow_results: List[Dict[str, Any]]):
+    def _transform_chain_of_experts_trajectories(self, workflow_results: List[Dict[str, Any]]):
         """Transform Chain of Experts workflow results into DataProto format"""
         from verl.utils.torch_functional import pad_sequence_to_length
         
@@ -237,20 +215,20 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 if v_list:
                     v_list = np.array(v_list)
                     metrics.update({
-                        f"multi_agent/{k}_mean": v_list.mean(),
-                        f"multi_agent/{k}_min": v_list.min(),
-                        f"multi_agent/{k}_max": v_list.max(),
+                        f"chain_of_experts/{k}_mean": v_list.mean(),
+                        f"chain_of_experts/{k}_min": v_list.min(),
+                        f"chain_of_experts/{k}_max": v_list.max(),
                     })
         
-        # Add multi-agent specific metrics
+        # Add Chain of Experts specific metrics
         metrics.update({
-            "multi_agent/workflow_type": self.workflow.workflow_id,
-            "multi_agent/agent_count": len(self.workflow.agent_configs),
-            "multi_agent/training_mode": self.training_mode,
+            "chain_of_experts/workflow_type": self.workflow.workflow_id,
+            "chain_of_experts/agent_count": len(self.workflow.agent_configs),
+            "chain_of_experts/training_mode": self.training_mode,
         })
         
         # Save chat completions
-        save_dir = os.path.join(self.config.trainer.default_local_dir, "multi_agent_completions")
+        save_dir = os.path.join(self.config.trainer.default_local_dir, "chain_of_experts_completions")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
             for chat_completion in chat_completions:
@@ -395,11 +373,9 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
     def _create_chat_completion(self, workflow_result: Dict[str, Any]) -> Dict[str, Any]:
         """Create chat completion record for logging"""
         return {
-            "workflow_id": workflow_result.get("workflow_id", "unknown"),
             "workflow_type": self.workflow.workflow_id,
+            "batch_idx": workflow_result.get("batch_idx", -1),
             "agent_count": len(workflow_result.get("agent_trajectories", {})),
-            "total_time": workflow_result.get("total_time", 0.0),
-            "final_outputs": workflow_result.get("final_outputs", {}),
             "training_mode": self.training_mode,
             "reward_aggregation": self.reward_aggregation,
         }
@@ -453,15 +429,15 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 
                 batch.pop(batch_keys=["input_ids", "attention_mask", "position_ids"])
                 batch.meta_info = {
-                    "multi_agent_rollout": True,
+                    "chain_of_experts_rollout": True,
                     "workflow_type": self.workflow.workflow_id,
                 }
                 
-                with _timer("chain_of_experts_step", timing_raw):
+                with _timer("chain_of_experts_batch", timing_raw):
                     self.init_envs_and_agents(batch)
                     
-                    # Generate Chain of Experts trajectories
-                    final_gen_batch_output, generate_metrics = self.generate_multi_agent_trajectory(
+                    # Process batch through Chain of Experts phases
+                    final_gen_batch_output, generate_metrics = self.generate_chain_of_experts_trajectories(
                         timing_raw=timing_raw, 
                         meta_info=batch.meta_info
                     )
@@ -544,7 +520,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         if self.workflow is None:
             return self._validate_agent()
         
-        # For now, fall back to single-agent validation
         # TODO: Implement Chain of Experts specific validation
         return self._validate_agent()
 
