@@ -179,7 +179,8 @@ class MultiAgentExecutionEngine(AgentExecutionEngine):
         - Uses the same async infrastructure as single-agent rLLM
         """
         role_engines = {}
-        for config in self.agent_cfgs:
+        global_config = config  # keep reference to the full Hydra config for worker engines
+        for agent_cfg in self.agent_cfgs:
             # Create engine args specific to this agent
             agent_engine_args = kwargs.copy()
             
@@ -188,28 +189,28 @@ class MultiAgentExecutionEngine(AgentExecutionEngine):
             agent_engine_args.pop('max_prompt_length', None)
             
             # Add agent-specific model configuration if provided
-            if config.model_path:
-                agent_engine_args["model_path"] = config.model_path
+            if agent_cfg.model_path:
+                agent_engine_args["model_path"] = agent_cfg.model_path
             
             # Add sampling parameters
             agent_engine_args["sampling_params"] = {
-                "temperature": config.temperature,
-                "top_p": config.top_p,
+                "temperature": agent_cfg.temperature,
+                "top_p": agent_cfg.top_p,
                 **agent_engine_args.get("sampling_params", {})
             }
             
-            role_engines[config.agent_id] = AgentExecutionEngine(
+            role_engines[agent_cfg.agent_id] = AgentExecutionEngine(
                 engine_name=engine_name,
                 tokenizer=tokenizer,
                 rollout_engine=rollout_engine,
-                config=config,
-                agent_class=config.agent_class,
-                agent_args=config.agent_args,
+                config=global_config,
+                agent_class=agent_cfg.agent_class,
+                agent_args=agent_cfg.agent_args,
                 env_class=env_class,
                 env_args=env_args,
                 n_parallel_agents=1,
-                max_response_length=config.max_response_length,
-                max_prompt_length=config.max_prompt_length,
+                max_response_length=agent_cfg.max_response_length,
+                max_prompt_length=agent_cfg.max_prompt_length,
                 trajectory_timeout=trajectory_timeout,
                 max_workers=max_workers,
                 **agent_engine_args
@@ -224,14 +225,11 @@ class MultiAgentExecutionEngine(AgentExecutionEngine):
         coordinators = []
         for env in envs:
             coordinator = ChainCoordinatorAgent(
-                agent_id=self.agent_cfgs[0].agent_id, # Coordinator ID is not used for env update
+                agent_id=self.agent_cfgs[0].agent_id,  # Coordinator ID not used for env update
                 phases=self.phases,
                 connections=self.connections,
                 agent_cfgs=self.agent_cfgs,
                 role_engines=self.role_engines,
-                env_class=self.env_class,
-                env_args=self.env_args,
-                # Coordinator is a logical agent; parent engine controls steps/timeouts
             )
             coordinators.append(coordinator)
         
@@ -323,8 +321,9 @@ class MultiAgentExecutionEngine(AgentExecutionEngine):
 
 class ChainCoordinatorAgent(BaseAgent):
     """Coordinates sequential multi-agent execution per environment step."""
-    def __init__(self, agent_id: str, phases: List[WorkflowPhase], connections: List[WorkflowConnection], agent_cfgs: List[AgentConfig], role_engines: Dict[str, AgentExecutionEngine], **kwargs):
-        super().__init__(agent_id=agent_id, **kwargs)
+    def __init__(self, agent_id: str, phases: List[WorkflowPhase], connections: List[WorkflowConnection], agent_cfgs: List[AgentConfig], role_engines: Dict[str, AgentExecutionEngine]):
+        # BaseAgent has no custom __init__; just call object init
+        super().__init__()
         self.phases = phases
         self.connections = connections
         self.agent_cfgs = {cfg.agent_id: cfg for cfg in agent_cfgs}
@@ -334,16 +333,52 @@ class ChainCoordinatorAgent(BaseAgent):
         for cfg in agent_cfgs:
             engine = role_engines[cfg.agent_id]
             self.internal_agents[cfg.agent_id] = engine.agent_class(agent_id=cfg.agent_id, **engine.agent_args)
+
+        from rllm.agents.agent import Trajectory
+        self._trajectory = Trajectory()
     
     def reset(self):
         for agent in self.internal_agents.values():
             agent.reset()
         super().reset()
+
+    # ------------------------------------------------------------------
+    # BaseAgent interface overrides
+    # ------------------------------------------------------------------
+
+    @property
+    def chat_completions(self) -> list[dict]:
+        """Return a minimal system prompt so the chat-template parser always has input.
+
+        The coordinator never actually talks to the model; the parent execution
+        engine still expects a non-empty prompt when it calls
+        `engine.get_model_response` for trajectory bookkeeping.  Returning a
+        single system message avoids the `IndexError: list index out of range`
+        inside the chat-template parser while keeping the content trivial.
+        """
+        msgs = [{"role": "system", "content": "Coordinator agent placeholder."}]
+        
+        if self._trajectory.steps and self._trajectory.steps[-1].model_response:
+            assistant_content = self._trajectory.steps[-1].model_response
+        else:
+            assistant_content = "I am ready to coordinate the chain of experts."
+        
+        msgs.append({"role": "assistant", "content": assistant_content})
+        return msgs
     
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
+        # Propagate environment feedback to each underlying agent.
         for agent in self.internal_agents.values():
             agent.update_from_env(observation, reward, done, info, **kwargs)
-        return super().update_from_env(observation, reward, done, info, **kwargs)
+        # Record a minimal step so AgentExecutionEngine bookkeeping doesn't crash.
+        from rllm.agents.agent import Step
+        step = Step(observation=observation, reward=reward, done=done, info=info)
+        self._trajectory.steps.append(step)
+        return None
+
+    def get_current_state(self):
+        from typing import Optional
+        return self._trajectory.steps[-1] if self._trajectory.steps else None
     
     def update_from_model(self, response: str, **kwargs) -> Action:
         # Execute chain sequentially for a single environment step
@@ -363,12 +398,25 @@ class ChainCoordinatorAgent(BaseAgent):
         # Parse final action from the last agent's response
         final_agent_id = self.phases[-1].agent_ids[0]
         final_text = previous_responses.get(final_agent_id, "")
+
+        # Record assistant message in our own trajectory so that downstream token
+        # accumulation logic sees an assistant message.
+        from rllm.agents.agent import Step
+        if self._trajectory.steps:
+            self._trajectory.steps[-1].model_response = final_text
+        else:
+            self._trajectory.steps.append(Step(model_response=final_text))
+
         return Action(action=self._parse_action_from_response(final_text))
     
     def _get_real_response(self, engine: AgentExecutionEngine, agent: BaseAgent) -> str:
         async def _gen():
             application_id = str(uuid.uuid4())
-            return await engine.get_model_response(agent.chat_completions, application_id, max_tokens=engine.max_response_length, **engine.sampling_params)
+            # Safety: ensure at least one system prompt exists, otherwise chat parser crashes.
+            prompt_msgs = agent.chat_completions
+            if not prompt_msgs:
+                prompt_msgs = [{"role": "system", "content": "You are a helpful assistant."}]
+            return await engine.get_model_response(prompt_msgs, application_id, max_tokens=engine.max_response_length, **engine.sampling_params)
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
