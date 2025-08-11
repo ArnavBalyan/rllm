@@ -84,14 +84,12 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             agent_args=agent_args,
         )
         
-        # Multi-agent specific configuration
         self.workflow = workflow
         self.multi_agent_config = multi_agent_config or {}
         self.multi_agent_engine = None
         
-        # Training modes for Chain of Experts
-        self.training_mode = self.multi_agent_config.get("training_mode", "final_agent")  # "unified", "final_agent"
-        self.reward_aggregation = self.multi_agent_config.get("reward_aggregation", "final_agent")  # "final_agent", "average"
+        self.training_mode = self.multi_agent_config.get("training_mode", "final_agent") 
+        self.reward_aggregation = self.multi_agent_config.get("reward_aggregation", "final_agent")
     
     def init_workers(self):
         """Initialize workers including multi-agent execution engine"""
@@ -180,14 +178,11 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         metrics = {}
         
         for workflow_result in workflow_results:
-            # Extract trajectory data based on training mode
             if self.training_mode == "unified":
-                # Create a unified trajectory from all agents in the chain
                 unified_trajectory = self._create_unified_trajectory(workflow_result)
                 prompt_tokens, response_tokens, response_masks, score = unified_trajectory
                 
             elif self.training_mode == "final_agent":
-                # Use only the final agent's trajectory for training
                 final_trajectory = self._extract_final_agent_trajectory(workflow_result)
                 prompt_tokens, response_tokens, response_masks, score = final_trajectory
                 
@@ -199,19 +194,14 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             all_masks_list.append(response_masks)
             traj_scores.append(score)
             
-            # Create chat completion format
             chat_completion = self._create_chat_completion(workflow_result)
             chat_completions.append(chat_completion)
             
-            # Extract metrics
             workflow_metrics = workflow_result.get("metrics", {})
             traj_metrics.append(workflow_metrics)
         
-        # Process metrics
         if traj_metrics:
-            # Flatten traj_metrics into a dict of lists
             traj_metrics = {k: [d.get(k, 0) for d in traj_metrics] for k in traj_metrics[0]}
-            # Aggregate metrics
             for k, v_list in traj_metrics.items():
                 v_list = [v for v in v_list if v is not None and v >= 0]
                 if v_list:
@@ -222,21 +212,18 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         f"chain_of_experts/{k}_max": v_list.max(),
                     })
         
-        # Add Chain of Experts specific metrics
         metrics.update({
             "chain_of_experts/workflow_type": self.workflow.workflow_id,
             "chain_of_experts/agent_count": len(self.workflow.agent_configs),
             "chain_of_experts/training_mode": self.training_mode,
         })
         
-        # Save chat completions
         save_dir = os.path.join(self.config.trainer.default_local_dir, "chain_of_experts_completions")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
             for chat_completion in chat_completions:
                 f.write(json.dumps(chat_completion) + "\n")
         
-        # Create batched tensors (same as single-agent trainer)
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
             [torch.flip(i, dims=[0]) for i in all_initial_tokens_list],
             batch_first=True,
@@ -293,17 +280,14 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         """Create a unified trajectory from all agents in the Chain of Experts"""
         agent_trajectories = workflow_result.get("agent_trajectories", {})
         
-        # Combine all agent responses into a single conversation
         combined_prompt = ""
         combined_response = ""
         
-        # Start with initial problem/context
         if "task" in workflow_result:
             task_data = workflow_result["task"]
             if isinstance(task_data, dict) and "problem" in task_data:
                 combined_prompt = f"Problem: {task_data['problem']}\n\n"
         
-        # Add each agent's contribution in chain order
         for agent_id, trajectory in agent_trajectories.items():
             if "prompt_tokens" in trajectory and "response_tokens" in trajectory:
                 agent_prompt = self.tokenizer.decode(trajectory["prompt_tokens"])
@@ -312,7 +296,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 combined_prompt += f"Agent {agent_id} context:\n{agent_prompt}\n\n"
                 combined_response += f"Agent {agent_id} response:\n{agent_response}\n\n"
         
-        # Tokenize the combined conversation
         prompt_tokens = torch.tensor(
             self.tokenizer.encode(combined_prompt, add_special_tokens=False), 
             dtype=torch.long
@@ -323,7 +306,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         )
         response_masks = torch.ones_like(response_tokens)
         
-        # Aggregate scores
         score = self._aggregate_workflow_score(workflow_result)
         
         return prompt_tokens, response_tokens, response_masks, score

@@ -186,7 +186,7 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
     if config.agent.get("agent_args") is not None:
         agent_args.update(config.agent.get("agent_args"))
 
-    # Create the base trainer with all required infrastructure
+    # Hacky way to pass the default configs to the trainer, todo: move this to a centralized config management in the future.
     base_trainer = AgentPPOTrainer(
         config=config,
         tokenizer=tokenizer,
@@ -201,22 +201,17 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
         agent_args=agent_args,
     )
 
-    print("Created base AgentPPOTrainer")
-
-    # Create the Chain of Experts agents configuration
     agent_configs = create_frozenlake_chain_of_experts_agents()
     
     print("Created Chain of Experts agents:")
     for agent_config in agent_configs:
         print(f"  - {agent_config.agent_id} ({agent_config.role.value}): {agent_config.agent_class.__name__}")
 
-    # Multi-agent configuration
     multi_agent_config = {
         "training_mode": "final_agent",  # Train on final judge's decision
         "reward_aggregation": "final_agent",  # Use final judge's reward
     }
 
-    # Create the multi-agent trainer
     trainer = create_chain_of_experts_trainer(
         base_trainer=base_trainer,
         agent_configs=agent_configs,
@@ -228,9 +223,7 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
     print(f"   Reward aggregation: {multi_agent_config['reward_aggregation']}")
     print("=" * 60)
 
-    # Initialize and start training
     trainer.init_workers()
-    print("Starting Chain of Experts training...")
     trainer.fit_multi_agent()
     
     print("Training completed!")
