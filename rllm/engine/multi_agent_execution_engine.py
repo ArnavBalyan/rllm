@@ -210,13 +210,13 @@ class MultiAgentExecutionEngine:
             self.agent_engines[config.agent_id] = AgentExecutionEngine(
                 engine_name=self.engine_name,
                 tokenizer=self.tokenizer,
-                rollout_engine=self.rollout_engine,  # Shared rollout engine with router
+                rollout_engine=self.rollout_engine,
                 config=self.config,
                 agent_class=config.agent_class,
                 agent_args=config.agent_args,
                 env_class=self.env_class,
                 env_args=self.env_args,
-                n_parallel_agents=1,  # Each agent engine handles one agent
+                n_parallel_agents=1,
                 max_response_length=config.max_response_length,
                 max_prompt_length=config.max_prompt_length,
                 trajectory_timeout=self.trajectory_timeout,
@@ -228,10 +228,8 @@ class MultiAgentExecutionEngine:
         """Update environment instances for the training batch"""
         self.envs = envs
         
-        # Distribute environments to agent engines
         for agent_id, engine in self.agent_engines.items():
-            # Each agent engine gets a copy of environments for the batch
-            agent_envs = [env for env in envs]  # Could be shared or copied based on thread safety
+            agent_envs = [env for env in envs]  
             agent_agents = [engine.agent_class(agent_id=agent_id, **engine.agent_args) for _ in envs]
             engine.update_envs_and_agents(agent_envs, agent_agents)
     
@@ -620,41 +618,3 @@ class MultiAgentExecutionEngine:
         
         return formatted
     
-    def _prepare_batch_item_context(
-        self, 
-        batch_idx: int, 
-        agent_id: str, 
-        previous_phase_outputs: Dict[str, List[Dict]]
-    ) -> Dict[str, Any]:
-        """
-        Prepare context for a specific batch item and agent based on previous phases.
-        
-        Args:
-            batch_idx: Index of the item in the batch
-            agent_id: Current agent ID
-            previous_phase_outputs: Outputs from previous phases
-            
-        Returns:
-            Context dict for this batch item and agent
-        """
-        context = {}
-        
-        # Find incoming connections to this agent
-        for connection in self.connections:
-            if connection.to_agent == agent_id:
-                source_agent = connection.from_agent
-                
-                # Find the output from source agent in previous phases
-                for phase_id, phase_batch_outputs in previous_phase_outputs.items():
-                    if batch_idx < len(phase_batch_outputs):
-                        phase_output = phase_batch_outputs[batch_idx]
-                        if source_agent in phase_output:
-                            data = phase_output[source_agent]
-                            
-                            # Apply transformation if provided
-                            if connection.transform_fn:
-                                data = connection.transform_fn(data)
-                            
-                            context[source_agent] = data
-        
-        return context 

@@ -33,10 +33,6 @@ class MultiAgentEnv(BaseEnv):
         
         return observation, info
     
-    def set_current_agent(self, agent_id: str):
-        """Set the current agent ID for context tracking"""
-        self.current_agent_id = agent_id
-    
     def _process_multi_agent_input(self, agent_input: Dict[str, Any]):
         """Process input from previous agents in the chain"""
         # Store previous agent outputs
