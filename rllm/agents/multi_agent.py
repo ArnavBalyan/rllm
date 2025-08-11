@@ -54,7 +54,12 @@ class MultiAgentBase(BaseAgent):
         self.multi_agent_context = {}
     
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
-        """Update agent state from environment"""
+        
+        # Handle mixed observation format (collaboration context + base observation)
+        actual_observation = observation
+        if isinstance(observation, dict) and "base_observation" in observation:
+            actual_observation = observation["base_observation"]
+        
         # Extract Chain of Experts context if present
         if isinstance(observation, dict):
             if "collaboration_prompt" in observation:
@@ -65,12 +70,12 @@ class MultiAgentBase(BaseAgent):
         # Create or update current step
         if not self._trajectory.steps or self._trajectory.steps[-1].done:
             # Start new step
-            step = Step(observation=observation, reward=reward, done=done, info=info)
+            step = Step(observation=actual_observation, reward=reward, done=done, info=info)
             self._trajectory.steps.append(step)
         else:
             # Update current step
             current_step = self._trajectory.steps[-1]
-            current_step.observation = observation
+            current_step.observation = actual_observation
             current_step.reward = reward
             current_step.done = done
             current_step.info.update(info)
@@ -97,7 +102,11 @@ class MultiAgentBase(BaseAgent):
         
         if "previous_agents" in self.multi_agent_context:
             agents_info = self.multi_agent_context["previous_agents"]
-            context_parts.append(f"PREVIOUS AGENTS IN CHAIN: {len(agents_info)} agents have provided input")
+            # Render detailed previous agent outputs
+            context_parts.append("PREVIOUS AGENTS CONTEXT:")
+            for agent_id, agent_text in agents_info.items():
+                preview = agent_text if len(str(agent_text)) <= 1200 else f"{str(agent_text)[:1200]}..."
+                context_parts.append(f"--- {agent_id.upper()} OUTPUT ---\n{preview}")
         
         return "\n\n".join(context_parts)
     

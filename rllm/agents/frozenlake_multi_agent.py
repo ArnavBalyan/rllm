@@ -10,7 +10,7 @@ from rllm.agents.frozenlake_agent import FrozenLakeAgent
 logger = logging.getLogger(__name__)
 
 
-class FrozenLakeProposerAgent(MultiAgentBase):
+class FrozenLakeProposerAgent(FrozenLakeAgent, MultiAgentBase):
     """
     Proposer agent for FrozenLake Chain of Experts.
     
@@ -47,22 +47,32 @@ Focus on SAFETY and STRATEGY rather than just the shortest path.
 """
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
-        super().__init__(agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
+        # Initialize FrozenLakeAgent
+        FrozenLakeAgent.__init__(self, max_steps=max_steps, **kwargs)
+        # Initialize MultiAgentBase with agent-specific info
+        MultiAgentBase.__init__(self, agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
         self.max_steps = max_steps
         self.step = 0
         self.reset()
 
+    @property
+    def chat_completions(self) -> List[Dict[str, str]]:
+        """Use MultiAgentBase chat_completions to get collaboration context"""
+        return MultiAgentBase.chat_completions.fget(self)
+
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
         """Update proposer agent with environment observation and multi-agent context"""
-        # Call parent to handle multi-agent context and update trajectory
-        super().update_from_env(observation, reward, done, info, **kwargs)
+        # Call MultiAgentBase to handle multi-agent context
+        MultiAgentBase.update_from_env(self, observation, reward, done, info, **kwargs)
         
-        # The observation is now stored in the trajectory by the parent class
-        # No need to manually manage messages - they're handled by chat_completions property
         self.step += 1
+    
+    def update_from_model(self, response: str, **kwargs) -> Action:
+        """Use FrozenLakeAgent's action parsing logic"""
+        return FrozenLakeAgent.update_from_model(self, response, **kwargs)
 
 
-class FrozenLakeExpertAgent(MultiAgentBase):
+class FrozenLakeExpertAgent(FrozenLakeAgent, MultiAgentBase):
     """
     Expert agent for FrozenLake Chain of Experts.
     
@@ -100,22 +110,32 @@ Focus on PRECISE EXECUTION of the proposed strategy.
 """
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
-        super().__init__(agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
+        # Initialize FrozenLakeAgent
+        FrozenLakeAgent.__init__(self, max_steps=max_steps, **kwargs)
+        # Initialize MultiAgentBase with agent-specific info
+        MultiAgentBase.__init__(self, agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
         self.max_steps = max_steps
         self.step = 0
         self.reset()
 
+    @property
+    def chat_completions(self) -> List[Dict[str, str]]:
+        """Use MultiAgentBase chat_completions to get collaboration context"""
+        return MultiAgentBase.chat_completions.fget(self)
+
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
         """Update expert agent with environment observation and multi-agent context"""
-        # Call parent to handle multi-agent context and update trajectory
-        super().update_from_env(observation, reward, done, info, **kwargs)
+        # Call MultiAgentBase to handle multi-agent context
+        MultiAgentBase.update_from_env(self, observation, reward, done, info, **kwargs)
         
-        # The observation is now stored in the trajectory by the parent class
-        # No need to manually manage messages - they're handled by chat_completions property
         self.step += 1
+    
+    def update_from_model(self, response: str, **kwargs) -> Action:
+        """Use FrozenLakeAgent's action parsing logic"""
+        return FrozenLakeAgent.update_from_model(self, response, **kwargs)
 
 
-class FrozenLakeJudgeAgent(MultiAgentBase):
+class FrozenLakeJudgeAgent(FrozenLakeAgent, MultiAgentBase):
     """
     Judge agent for FrozenLake Chain of Experts.
     
@@ -153,16 +173,26 @@ Focus on SAFETY VALIDATION and OPTIMAL CHOICE SELECTION.
 """
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
-        super().__init__(agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
+        # Initialize FrozenLakeAgent
+        FrozenLakeAgent.__init__(self, max_steps=max_steps, **kwargs)
+        # Initialize MultiAgentBase with agent-specific info
+        MultiAgentBase.__init__(self, agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
         self.max_steps = max_steps
         self.step = 0
         self.reset()
 
+    @property
+    def chat_completions(self) -> List[Dict[str, str]]:
+        """Use MultiAgentBase chat_completions to get collaboration context"""
+        return MultiAgentBase.chat_completions.fget(self)
+
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
         """Update judge agent with environment observation and multi-agent context"""
-        # Call parent to handle multi-agent context and update trajectory
-        super().update_from_env(observation, reward, done, info, **kwargs)
+        # Call MultiAgentBase to handle multi-agent context
+        MultiAgentBase.update_from_env(self, observation, reward, done, info, **kwargs)
         
-        # The observation is now stored in the trajectory by the parent class
-        # No need to manually manage messages - they're handled by chat_completions property
         self.step += 1
+    
+    def update_from_model(self, response: str, **kwargs) -> Action:
+        """Use FrozenLakeAgent's action parsing logic"""
+        return FrozenLakeAgent.update_from_model(self, response, **kwargs)

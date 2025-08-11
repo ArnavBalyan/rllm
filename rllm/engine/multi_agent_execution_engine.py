@@ -282,12 +282,16 @@ class MultiAgentExecutionEngine(AgentExecutionEngine):
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor() as ex:
                     fut = ex.submit(asyncio.run, _collect())
-                    results = fut.result(timeout=600)
+                    # Production note: batch execution timeout should be configurable
+                    batch_timeout = meta_info.get('batch_execution_timeout', 600)
+                    results = fut.result(timeout=batch_timeout)
             else:
                 results = loop.run_until_complete(_collect())
         except Exception as e:
+            colorful_print(f"❌ CRITICAL ERROR: Chain of Experts batch execution failed", "red")
+            colorful_print(f"🔥 Error details: {str(e)}", "red")
             logger.error(f"Failed to collect trajectories: {e}")
-            raise
+            raise RuntimeError(f"Chain of Experts batch execution failed: {str(e)}") from e
         
         return self._format_results_for_training(results)
     
@@ -297,8 +301,21 @@ class MultiAgentExecutionEngine(AgentExecutionEngine):
         
         The training expects specific format with tokens, rewards, etc.
         """
+        if not results:
+            raise RuntimeError("Chain of Experts execution produced no results - this indicates a critical system failure")
+        
         formatted_results = []
-        for token_result in results:
+        for i, token_result in enumerate(results):
+            if not token_result:
+                raise RuntimeError(f"Chain of Experts result {i} is empty - this indicates incomplete trajectory execution")
+            
+            # Validate required fields
+            required_fields = ["trajectory_reward", "chat_completions"]
+            for field in required_fields:
+                if field not in token_result:
+                    colorful_print(f"❌ Missing required field '{field}' in result {i}", "red")
+                    raise ValueError(f"Chain of Experts result validation failed: missing required field '{field}' in trajectory result {i}")
+            
             # token_result keys documented in AgentExecutionEngine.run_agent_trajectory_async (mode="Token")
             formatted_results.append({
                 "workflow_type": self.workflow.workflow_id,
@@ -316,30 +333,82 @@ class MultiAgentExecutionEngine(AgentExecutionEngine):
                 },
                 "phase_outputs": {},
             })
+        
+        colorful_print(f"✅ Successfully formatted {len(formatted_results)} Chain of Experts results", "green")
         return formatted_results
 
 
 class ChainCoordinatorAgent(BaseAgent):
     """Coordinates sequential multi-agent execution per environment step."""
     def __init__(self, agent_id: str, phases: List[WorkflowPhase], connections: List[WorkflowConnection], agent_cfgs: List[AgentConfig], role_engines: Dict[str, AgentExecutionEngine]):
+        # Production audit log: Log chain configuration
+        colorful_print(f"\n🏗️  INITIALIZING CHAIN OF EXPERTS COORDINATOR", "cyan")
+        colorful_print(f"{'─'*60}", "cyan")
+        colorful_print(f"🆔 Coordinator ID: {agent_id}", "white")
+        colorful_print(f"📊 Number of Phases: {len(phases)}", "white")
+        colorful_print(f"🔗 Number of Connections: {len(connections)}", "white")
+        colorful_print(f"🤖 Number of Agents: {len(agent_cfgs)}", "white")
+        
+        # Log phase sequence
+        phase_sequence = " → ".join([f"{phase.phase_id}[{','.join(phase.agent_ids)}]" for phase in phases])
+        colorful_print(f"🎭 Phase Sequence: {phase_sequence}", "white")
+        
+        # Validate configuration
+        if not phases:
+            colorful_print(f"❌ ERROR: No phases configured!", "red")
+            raise ValueError("Chain of Experts requires at least one phase")
+        
+        if not agent_cfgs:
+            colorful_print(f"❌ ERROR: No agents configured!", "red")
+            raise ValueError("Chain of Experts requires at least one agent")
+        
+        # Validate that all phases have corresponding agents
+        for phase in phases:
+            for agent_id_in_phase in phase.agent_ids:
+                if agent_id_in_phase not in [cfg.agent_id for cfg in agent_cfgs]:
+                    colorful_print(f"❌ ERROR: Phase {phase.phase_id} references unknown agent {agent_id_in_phase}!", "red")
+                    raise ValueError(f"Unknown agent {agent_id_in_phase} in phase {phase.phase_id}")
+        
+        colorful_print(f"✅ Configuration validation passed", "green")
+        
         # BaseAgent has no custom __init__; just call object init
         super().__init__()
         self.phases = phases
         self.connections = connections
         self.agent_cfgs = {cfg.agent_id: cfg for cfg in agent_cfgs}
         self.role_engines = role_engines
+        
         # one logical internal agent state per role id
         self.internal_agents: Dict[str, BaseAgent] = {}
         for cfg in agent_cfgs:
+            colorful_print(f"🔧 Initializing agent: {cfg.agent_id} ({cfg.agent_class.__name__})", "blue")
             engine = role_engines[cfg.agent_id]
             self.internal_agents[cfg.agent_id] = engine.agent_class(agent_id=cfg.agent_id, **engine.agent_args)
+            colorful_print(f"   ✅ Agent {cfg.agent_id} initialized successfully", "green")
 
+        # Minimal trajectory for bookkeeping used by AgentExecutionEngine
         from rllm.agents.agent import Trajectory
         self._trajectory = Trajectory()
+        
+        colorful_print(f"🎉 Chain of Experts Coordinator initialization complete!", "green")
+        colorful_print(f"{'─'*60}\n", "cyan")
+        
+        # Mark initialization as complete for state validation
+        self._initialization_complete = True
+        # Track chain execution state
+        self._chain_executed = False
     
     def reset(self):
+        colorful_print(f"🔄 Resetting Chain of Experts Coordinator", "cyan")
         for agent in self.internal_agents.values():
             agent.reset()
+        
+        # Reset our own trajectory and execution state
+        from rllm.agents.agent import Trajectory
+        self._trajectory = Trajectory()
+        self._chain_executed = False
+        colorful_print(f"✅ Chain coordinator reset complete", "green")
+        
         super().reset()
 
     # ------------------------------------------------------------------
@@ -358,10 +427,18 @@ class ChainCoordinatorAgent(BaseAgent):
         """
         msgs = [{"role": "system", "content": "Coordinator agent placeholder."}]
         
+        # Determine appropriate assistant content based on execution state
         if self._trajectory.steps and self._trajectory.steps[-1].model_response:
             assistant_content = self._trajectory.steps[-1].model_response
+            # Ensure it's not empty or whitespace
+            if not assistant_content.strip():
+                raise RuntimeError("Chain coordinator has empty model response - this indicates a serious execution flow issue")
+            colorful_print(f"📋 Using real chain execution result as assistant message", "blue")
         else:
-            assistant_content = "I am ready to coordinate the chain of experts."
+            # During trajectory setup phase, provide a valid placeholder
+            # The actual chain execution happens in update_from_model()
+            assistant_content = "Chain of Experts coordinator ready for execution."
+            colorful_print(f"📋 Using placeholder assistant message (chain hasn't executed yet)", "blue")
         
         msgs.append({"role": "assistant", "content": assistant_content})
         return msgs
@@ -381,54 +458,167 @@ class ChainCoordinatorAgent(BaseAgent):
         return self._trajectory.steps[-1] if self._trajectory.steps else None
     
     def update_from_model(self, response: str, **kwargs) -> Action:
+        # Log start of chain execution
+        colorful_print(f"\n{'='*100}", "cyan")
+        colorful_print(f"🔗 CHAIN OF EXPERTS COORDINATOR - Starting Chain Execution", "cyan")
+        colorful_print(f"{'='*100}", "cyan")
+        
         # Execute chain sequentially for a single environment step
         previous_responses: Dict[str, str] = {}
+        expected_agents = [phase.agent_ids[0] for phase in self.phases]
+        
         for phase in self.phases:
             agent_id = phase.agent_ids[0]
+            
+            # Validate agent exists
+            if agent_id not in self.internal_agents:
+                colorful_print(f"❌ CRITICAL ERROR: Agent {agent_id} not found in internal agents", "red")
+                raise RuntimeError(f"Chain execution failed: Agent {agent_id} not properly initialized")
+            
+            if agent_id not in self.role_engines:
+                colorful_print(f"❌ CRITICAL ERROR: Engine for agent {agent_id} not found", "red")
+                raise RuntimeError(f"Chain execution failed: Engine for agent {agent_id} not found")
+            
             engine = self.role_engines[agent_id]
             agent = self.internal_agents[agent_id]
+            
+            # Log agent start
+            colorful_print(f"\n🤖 EXECUTING AGENT: {agent_id.upper()}", "yellow")
+            colorful_print(f"{'─'*80}", "yellow")
+            
             # Prepare collaboration context from previous responses
             ctx = self._prepare_agent_context(agent_id, previous_responses)
-            if hasattr(agent, "collaboration_prompt") and ctx:
-                agent.collaboration_prompt = ctx
+            # Also prepare a structured map of previous agent outputs
+            prev_map = {conn.from_agent: previous_responses[conn.from_agent]
+                        for conn in self.connections
+                        if conn.to_agent == agent_id and conn.from_agent in previous_responses}
+            
+            # Update agent with collaboration context via proper MultiAgentBase mechanism
+            if ctx:
+                # Pass context through observation dict as expected by MultiAgentBase
+                current_observation = agent.get_current_state().observation if agent.get_current_state() else None
+                context_observation = {
+                    "collaboration_prompt": ctx,
+                    "base_observation": current_observation,
+                    "previous_agents": prev_map
+                }
+                agent.update_from_env(context_observation, 0.0, False, {})
+                colorful_print(f"📥 Input Context from Previous Agents:", "white")
+                colorful_print(f"{ctx}", "white")
+            else:
+                colorful_print(f"📥 Input Context: [First agent - no previous context]", "white")
+            
+            # Log agent's current state/prompt
+            if hasattr(agent, 'chat_completions') and agent.chat_completions:
+                colorful_print(f"💭 Agent's Current Prompt:", "blue")
+                for i, msg in enumerate(agent.chat_completions):
+                    role_color = "green" if msg["role"] == "system" else "cyan" if msg["role"] == "user" else "yellow"
+                    content_preview = msg["content"][:500] + "..." if len(msg["content"]) > 500 else msg["content"]
+                    colorful_print(f"   [{i+1}] {msg['role'].upper()}: {content_preview}", role_color)
+            else:
+                colorful_print(f"❌ CRITICAL ERROR: Agent {agent_id} has no chat completions", "red")
+                raise RuntimeError(f"Chain execution failed: Agent {agent_id} has no chat completions")
+            
             # Call real model generation via engine.get_model_response
             text = self._get_real_response(engine, agent)
+            
+            # Validate response is not empty
+            if not text or not text.strip():
+                colorful_print(f"❌ CRITICAL ERROR: Agent {agent_id} returned empty response", "red")
+                raise RuntimeError(f"Chain execution failed: Agent {agent_id} returned empty or whitespace-only response")
+            
+            # Log agent response
+            colorful_print(f"📤 Agent Response:", "green")
+            response_preview = text[:800] + "..." if len(text) > 800 else text
+            colorful_print(f"{response_preview}", "green")
+            
             agent.update_from_model(text)
             previous_responses[agent_id] = text
+            
+            colorful_print(f"✅ Agent {agent_id.upper()} completed successfully", "green")
+        
+        # Validate all expected agents executed
+        if len(previous_responses) != len(expected_agents):
+            colorful_print(f"❌ CRITICAL ERROR: Expected {len(expected_agents)} agents, but only {len(previous_responses)} executed", "red")
+            raise RuntimeError(f"Chain execution incomplete: Expected {len(expected_agents)} agents, got {len(previous_responses)}")
+        
+        for expected_agent in expected_agents:
+            if expected_agent not in previous_responses:
+                colorful_print(f"❌ CRITICAL ERROR: Agent {expected_agent} did not execute", "red")
+                raise RuntimeError(f"Chain execution failed: Agent {expected_agent} missing from execution results")
+        
         # Parse final action from the last agent's response
         final_agent_id = self.phases[-1].agent_ids[0]
-        final_text = previous_responses.get(final_agent_id, "")
+        final_agent = self.internal_agents[final_agent_id]
+        
+        # Get the action that was already parsed by the final agent during chain execution
+        final_step = final_agent.get_current_state()
+        if not final_step or not hasattr(final_step, 'action'):
+            colorful_print(f"❌ CRITICAL ERROR: Final agent {final_agent_id} has no parsed action", "red")
+            raise RuntimeError(f"Chain execution failed: Final agent {final_agent_id} has no parsed action")
+        
+        final_action_value = final_step.action
+        
+        # Log final decision
+        colorful_print(f"\n🎯 FINAL CHAIN DECISION", "magenta")
+        colorful_print(f"{'─'*80}", "magenta")
+        colorful_print(f"🏛️  Final Agent: {final_agent_id.upper()}", "white")
+        colorful_print(f"📜 Final Response: {previous_responses[final_agent_id]}", "white")
+        
+        colorful_print(f"⚡ Parsed Action: {final_action_value}", "yellow")
+        
+        # Log chain summary
+        colorful_print(f"\n📊 CHAIN EXECUTION SUMMARY", "cyan")
+        colorful_print(f"{'─'*80}", "cyan")
+        colorful_print(f"🔢 Total Agents in Chain: {len(self.phases)}", "white")
+        colorful_print(f"🎭 Agent Sequence: {' → '.join([phase.agent_ids[0].upper() for phase in self.phases])}", "white")
+        colorful_print(f"💫 Final Action Value: {final_action_value}", "white")
+        colorful_print(f"{'='*100}\n", "cyan")
 
         # Record assistant message in our own trajectory so that downstream token
         # accumulation logic sees an assistant message.
         from rllm.agents.agent import Step
         if self._trajectory.steps:
-            self._trajectory.steps[-1].model_response = final_text
+            self._trajectory.steps[-1].model_response = previous_responses[final_agent_id]
         else:
-            self._trajectory.steps.append(Step(model_response=final_text))
+            self._trajectory.steps.append(Step(model_response=previous_responses[final_agent_id]))
 
-        return Action(action=self._parse_action_from_response(final_text))
+        # Mark chain as executed
+        self._chain_executed = True
+        colorful_print(f"✅ Chain execution state updated - execution complete", "green")
+
+        return Action(action=final_action_value)
     
     def _get_real_response(self, engine: AgentExecutionEngine, agent: BaseAgent) -> str:
+        colorful_print(f"🚀 Calling LLM for response generation...", "blue")
         async def _gen():
             application_id = str(uuid.uuid4())
-            # Safety: ensure at least one system prompt exists, otherwise chat parser crashes.
+            colorful_print(f"🔑 Application ID: {application_id}", "blue")
+            # Validate that agent has proper chat completions
             prompt_msgs = agent.chat_completions
             if not prompt_msgs:
-                prompt_msgs = [{"role": "system", "content": "You are a helpful assistant."}]
+                colorful_print(f"❌ CRITICAL ERROR: Agent has no chat completions", "red")
+                raise RuntimeError(f"Agent {getattr(agent, 'agent_id', 'unknown')} has no chat completions - this indicates improper agent initialization or state management")
             return await engine.get_model_response(prompt_msgs, application_id, max_tokens=engine.max_response_length, **engine.sampling_params)
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor() as ex:
+                    colorful_print(f"⏳ Executing LLM call in thread pool...", "blue")
                     fut = ex.submit(asyncio.run, _gen())
-                    return fut.result(timeout=60)
+                    # Production note: timeout should be configurable via agent config
+                    generation_timeout = getattr(engine, 'generation_timeout', 60)
+                    return fut.result(timeout=generation_timeout)
             else:
+                colorful_print(f"⏳ Executing LLM call directly...", "blue")
                 return loop.run_until_complete(_gen())
         except Exception as e:
-            logger.warning(f"Coordinator fallback due to generation error: {e}")
-            return self._fallback_response(agent)
+            colorful_print(f"❌ CRITICAL ERROR: LLM generation failed for agent", "red")
+            colorful_print(f"🔥 Error details: {str(e)}", "red")
+            colorful_print(f"💥 This indicates a serious issue with model inference", "red")
+            logger.error(f"Chain of Experts execution failed due to LLM generation error: {e}")
+            raise RuntimeError(f"Chain of Experts failed: LLM generation error for agent - {str(e)}") from e
     
     def _prepare_agent_context(self, agent_id: str, previous: Dict[str, str]) -> str:
         parts = []
@@ -439,16 +629,4 @@ class ChainCoordinatorAgent(BaseAgent):
                     txt = conn.transform_fn(txt)
                 parts.append(f"{conn.from_agent} -> {agent_id}:\n{txt}")
         return "\n\n".join(parts)
-    
-    def _fallback_response(self, agent: BaseAgent) -> str:
-        # last-resort: deterministic placeholder
-        return "[fallback] ```Left```"
-    
-    def _parse_action_from_response(self, response: str) -> int:
-        import re
-        m = re.search(r"```(\w+)```", response)
-        if not m:
-            return 1
-        s = m.group(1).lower()
-        return {"left":1, "down":2, "right":3, "up":4}.get(s, 1)
     
