@@ -123,44 +123,29 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
     
     def init_envs_and_agents(self, batch):
         """Initialize environments and agents for multi-agent training"""
-        if self.workflow is None:
-            # Fall back to single-agent mode
-            return super().init_envs_and_agents(batch)
         
         env_args = batch.non_tensor_batch["extra_info"].tolist()
         
-        # Create environments for multi-agent workflows
-        def _create_env(i):
-            if isinstance(env_args[i], str):
-                env_args[i] = json.loads(env_args[i])
-            return i, self.env_class.from_dict({**env_args[i], **self.env_args})
+        envs = []
+        for i, env_arg in enumerate(env_args):
+            if isinstance(env_arg, str):
+                env_arg = json.loads(env_arg)
+            env = self.env_class.from_dict({**env_arg, **self.env_args})
+            envs.append(env)
 
-        # Create environments in parallel while preserving order
-        envs = [None] * len(env_args)
-        with ThreadPoolExecutor(max_workers=64) as executor:
-            env_futures = [executor.submit(_create_env, i) for i in range(len(env_args))]
-            for future in as_completed(env_futures):
-                idx, env = future.result()
-                envs[idx] = env
-
-        # Update multi-agent engine with environments
         self.multi_agent_engine.update_envs_and_agents(envs)
         return envs
     
     def generate_chain_of_experts_trajectories(self, timing_raw=None, meta_info=None):
         """Generate Chain of Experts trajectories by processing batch through phases"""
-        if timing_raw is None:
-            timing_raw = {}
         
         with _timer("collect_chain_of_experts_trajectories", timing_raw):
-            # Execute the batch through all phases of the Chain of Experts
             workflow_results = self.multi_agent_engine.execute_chain_of_experts_batch(
                 timing_raw=timing_raw,
                 meta_info=meta_info
             )
         
         with _timer("transform_chain_of_experts_trajectories", timing_raw):
-            # Transform multi-agent results into training format
             final_gen_batch_output, metrics = self._transform_chain_of_experts_trajectories(workflow_results, meta_info)
         
         return final_gen_batch_output, metrics
@@ -176,7 +161,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         chat_completions = []
         traj_metrics = []
         metrics = {}
-        
+        print("Initializing with empty lists, at _transform_chain_of_experts_trajectories", workflow_results, original_meta_info)
         for workflow_result in workflow_results:
             if self.training_mode == "unified":
                 unified_trajectory = self._create_unified_trajectory(workflow_result)
@@ -218,12 +203,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             "chain_of_experts/training_mode": self.training_mode,
         })
         
-        save_dir = os.path.join(self.config.trainer.default_local_dir, "chain_of_experts_completions")
-        os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
-            for chat_completion in chat_completions:
-                f.write(json.dumps(chat_completion) + "\n")
-        
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
             [torch.flip(i, dims=[0]) for i in all_initial_tokens_list],
             batch_first=True,
@@ -254,11 +233,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         attention_mask = torch.where(trajectory_batch != self.tokenizer.pad_token_id, 1, 0)
         position_ids = (torch.cumsum(attention_mask, dim=1) - 1) * attention_mask
         
-        # Place rewards at last response token
         score_batch = torch.zeros_like(response_batch, dtype=torch.float32)
         prompt_length = prompts_batch.shape[1]
         valid_response_length_sequences = attention_mask[:, prompt_length:].sum(dim=-1)
-        
+
         for i, traj_score in enumerate(traj_scores):
             last_valid_idx = valid_response_length_sequences[i] - 1
             if last_valid_idx >= 0 and last_valid_idx < score_batch.shape[1]:
@@ -314,14 +292,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         """Extract trajectory from the final agent in the Chain of Experts"""
         agent_trajectories = workflow_result.get("agent_trajectories", {})
         
-        if not agent_trajectories:
-            # Fallback to empty trajectory
-            prompt_tokens = torch.tensor([self.tokenizer.eos_token_id], dtype=torch.long)
-            response_tokens = torch.tensor([self.tokenizer.eos_token_id], dtype=torch.long)
-            response_masks = torch.ones_like(response_tokens)
-            return prompt_tokens, response_tokens, response_masks, 0.0
-        
-        # Get the last agent's trajectory (final agent in the chain)
         final_agent_id = list(agent_trajectories.keys())[-1]
         final_trajectory = agent_trajectories[final_agent_id]
         
@@ -334,26 +304,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         return prompt_tokens, response_tokens, response_masks, score
     
     def _aggregate_workflow_score(self, workflow_result: Dict[str, Any]) -> float:
-        """Aggregate scores from Chain of Experts workflow"""
-        if self.reward_aggregation == "final_agent":
-            # Use score from final agent in the chain
-            agent_trajectories = workflow_result.get("agent_trajectories", {})
-            if agent_trajectories:
-                final_agent_id = list(agent_trajectories.keys())[-1]
-                return agent_trajectories[final_agent_id].get("trajectory_reward", 0.0)
-            return 0.0
-        
-        elif self.reward_aggregation == "average":
-            # Average scores across all agents in the chain
-            agent_trajectories = workflow_result.get("agent_trajectories", {})
-            if agent_trajectories:
-                scores = [traj.get("trajectory_reward", 0.0) for traj in agent_trajectories.values()]
-                return sum(scores) / len(scores)
-            return 0.0
-        
-        else:
-            return 0.0
-    
+        agent_trajectories = workflow_result.get("agent_trajectories", {})
+        final_agent_id = list(agent_trajectories.keys())[-1]
+        return agent_trajectories[final_agent_id].get("trajectory_reward", 0.0)
+
     def _create_chat_completion(self, workflow_result: Dict[str, Any]) -> Dict[str, Any]:
         """Create chat completion record for logging"""
         return {
@@ -385,7 +339,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         # CHECKPOINT LOADING TEMPORARILY DISABLED
         # self._load_checkpoint()
         
-        # Perform validation before training
         start_time = time.time()
         if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
             val_metrics = self._validate_multi_agent()
@@ -395,7 +348,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 return
         print(f"Time taken to validate Chain of Experts system: {time.time() - start_time}")
         
-        # Start from step 1
         self.global_steps += 1
         
         for epoch in range(self.config.trainer.total_epochs):
@@ -420,12 +372,17 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 
                 with _timer("chain_of_experts_batch", timing_raw):
                     self.init_envs_and_agents(batch)
+                    # at this point the system ahs multiple boards, and coordinator agent assigned
+                    # to each board with some basic metadata and initialized empty lists etc.
                     
-                    # Process batch through Chain of Experts phases
                     final_gen_batch_output, generate_metrics = self.generate_chain_of_experts_trajectories(
                         timing_raw=timing_raw, 
                         meta_info=batch.meta_info
                     )
+
+                    print("Generation complete, going to crash!")
+                    import os; os._exit(1)
+
                     batch = batch.union(final_gen_batch_output)
                     metrics.update(generate_metrics)
                     

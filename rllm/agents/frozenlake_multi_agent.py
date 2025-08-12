@@ -48,7 +48,7 @@ Focus on SAFETY and STRATEGY rather than just the shortest path.
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
         # Initialize FrozenLakeAgent
-        FrozenLakeAgent.__init__(self, max_steps=max_steps, **kwargs)
+        FrozenLakeAgent.__init__(self, max_steps=max_steps, use_accumulate_history=True, **kwargs)
         # Initialize MultiAgentBase with agent-specific info
         MultiAgentBase.__init__(self, agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
         self.max_steps = max_steps
@@ -57,16 +57,41 @@ Focus on SAFETY and STRATEGY rather than just the shortest path.
 
     @property
     def chat_completions(self) -> List[Dict[str, str]]:
-        """Use MultiAgentBase chat_completions to get collaboration context"""
-        return MultiAgentBase.chat_completions.fget(self)
+        """Combine FrozenLake conversation history with simple Chain context"""
+        # Get base messages from FrozenLakeAgent (includes system prompt and conversation history)
+        base_messages = FrozenLakeAgent.chat_completions.fget(self)
+        
+        # If we have chain context, inject it as a user message after system prompt
+        if self.multi_agent_context and "chain_context" in self.multi_agent_context:
+            context_content = self.multi_agent_context["chain_context"]
+            context_msg = {"role": "user", "content": f"CHAIN CONTEXT:\n{context_content}"}
+            if len(base_messages) > 1:
+                # Insert after system prompt, before other messages
+                return [base_messages[0], context_msg] + base_messages[1:]
+            else:
+                # Only system prompt exists
+                return base_messages + [context_msg]
+        
+        return base_messages
 
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
-        """Update proposer agent with environment observation and multi-agent context"""
-        # Call MultiAgentBase to handle multi-agent context
+        """Update proposer agent with environment observation and chain context"""
+        # First, call MultiAgentBase to extract chain context if present
         MultiAgentBase.update_from_env(self, observation, reward, done, info, **kwargs)
         
-        self.step += 1
-    
+        # Then call FrozenLakeAgent to process the actual environment observation and create user prompt
+        # Use the base observation (extracted by MultiAgentBase) for the actual game state
+        actual_observation = observation
+        if isinstance(observation, dict) and "base_observation" in observation:
+            actual_observation = observation["base_observation"]
+        
+        # Call FrozenLakeAgent's update_from_env with the actual game observation
+        FrozenLakeAgent.update_from_env(self, actual_observation, reward, done, info, **kwargs)
+        
+        # NOTE: Step-wise history is automatically maintained by FrozenLakeAgent's use_accumulate_history=True
+        # This means each agent keeps track of all previous environment steps and model responses
+        # which provides the "game history" context the user requested
+        
     def update_from_model(self, response: str, **kwargs) -> Action:
         """Use FrozenLakeAgent's action parsing logic"""
         return FrozenLakeAgent.update_from_model(self, response, **kwargs)
@@ -111,7 +136,7 @@ Focus on PRECISE EXECUTION of the proposed strategy.
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
         # Initialize FrozenLakeAgent
-        FrozenLakeAgent.__init__(self, max_steps=max_steps, **kwargs)
+        FrozenLakeAgent.__init__(self, max_steps=max_steps, use_accumulate_history=True, **kwargs)
         # Initialize MultiAgentBase with agent-specific info
         MultiAgentBase.__init__(self, agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
         self.max_steps = max_steps
@@ -120,16 +145,41 @@ Focus on PRECISE EXECUTION of the proposed strategy.
 
     @property
     def chat_completions(self) -> List[Dict[str, str]]:
-        """Use MultiAgentBase chat_completions to get collaboration context"""
-        return MultiAgentBase.chat_completions.fget(self)
+        """Combine FrozenLake conversation history with simple Chain context"""
+        # Get base messages from FrozenLakeAgent (includes system prompt and conversation history)
+        base_messages = FrozenLakeAgent.chat_completions.fget(self)
+        
+        # If we have chain context, inject it as a user message after system prompt
+        if self.multi_agent_context and "chain_context" in self.multi_agent_context:
+            context_content = self.multi_agent_context["chain_context"]
+            context_msg = {"role": "user", "content": f"CHAIN CONTEXT:\n{context_content}"}
+            if len(base_messages) > 1:
+                # Insert after system prompt, before other messages
+                return [base_messages[0], context_msg] + base_messages[1:]
+            else:
+                # Only system prompt exists
+                return base_messages + [context_msg]
+        
+        return base_messages
 
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
-        """Update expert agent with environment observation and multi-agent context"""
-        # Call MultiAgentBase to handle multi-agent context
+        """Update expert agent with environment observation and chain context"""
+        # First, call MultiAgentBase to extract chain context if present
         MultiAgentBase.update_from_env(self, observation, reward, done, info, **kwargs)
         
-        self.step += 1
-    
+        # Then call FrozenLakeAgent to process the actual environment observation and create user prompt
+        # Use the base observation (extracted by MultiAgentBase) for the actual game state
+        actual_observation = observation
+        if isinstance(observation, dict) and "base_observation" in observation:
+            actual_observation = observation["base_observation"]
+        
+        # Call FrozenLakeAgent's update_from_env with the actual game observation
+        FrozenLakeAgent.update_from_env(self, actual_observation, reward, done, info, **kwargs)
+        
+        # NOTE: Step-wise history is automatically maintained by FrozenLakeAgent's use_accumulate_history=True
+        # This means each agent keeps track of all previous environment steps and model responses
+        # which provides the "game history" context the user requested
+        
     def update_from_model(self, response: str, **kwargs) -> Action:
         """Use FrozenLakeAgent's action parsing logic"""
         return FrozenLakeAgent.update_from_model(self, response, **kwargs)
@@ -174,7 +224,7 @@ Focus on SAFETY VALIDATION and OPTIMAL CHOICE SELECTION.
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
         # Initialize FrozenLakeAgent
-        FrozenLakeAgent.__init__(self, max_steps=max_steps, **kwargs)
+        FrozenLakeAgent.__init__(self, max_steps=max_steps, use_accumulate_history=True, **kwargs)
         # Initialize MultiAgentBase with agent-specific info
         MultiAgentBase.__init__(self, agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
         self.max_steps = max_steps
@@ -183,16 +233,41 @@ Focus on SAFETY VALIDATION and OPTIMAL CHOICE SELECTION.
 
     @property
     def chat_completions(self) -> List[Dict[str, str]]:
-        """Use MultiAgentBase chat_completions to get collaboration context"""
-        return MultiAgentBase.chat_completions.fget(self)
+        """Combine FrozenLake conversation history with simple Chain context"""
+        # Get base messages from FrozenLakeAgent (includes system prompt and conversation history)
+        base_messages = FrozenLakeAgent.chat_completions.fget(self)
+        
+        # If we have chain context, inject it as a user message after system prompt
+        if self.multi_agent_context and "chain_context" in self.multi_agent_context:
+            context_content = self.multi_agent_context["chain_context"]
+            context_msg = {"role": "user", "content": f"CHAIN CONTEXT:\n{context_content}"}
+            if len(base_messages) > 1:
+                # Insert after system prompt, before other messages
+                return [base_messages[0], context_msg] + base_messages[1:]
+            else:
+                # Only system prompt exists
+                return base_messages + [context_msg]
+        
+        return base_messages
 
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
-        """Update judge agent with environment observation and multi-agent context"""
-        # Call MultiAgentBase to handle multi-agent context
+        """Update judge agent with environment observation and chain context"""
+        # First, call MultiAgentBase to extract chain context if present
         MultiAgentBase.update_from_env(self, observation, reward, done, info, **kwargs)
         
-        self.step += 1
-    
+        # Then call FrozenLakeAgent to process the actual environment observation and create user prompt
+        # Use the base observation (extracted by MultiAgentBase) for the actual game state
+        actual_observation = observation
+        if isinstance(observation, dict) and "base_observation" in observation:
+            actual_observation = observation["base_observation"]
+        
+        # Call FrozenLakeAgent's update_from_env with the actual game observation
+        FrozenLakeAgent.update_from_env(self, actual_observation, reward, done, info, **kwargs)
+        
+        # NOTE: Step-wise history is automatically maintained by FrozenLakeAgent's use_accumulate_history=True
+        # This means each agent keeps track of all previous environment steps and model responses
+        # which provides the "game history" context the user requested
+        
     def update_from_model(self, response: str, **kwargs) -> Action:
         """Use FrozenLakeAgent's action parsing logic"""
         return FrozenLakeAgent.update_from_model(self, response, **kwargs)

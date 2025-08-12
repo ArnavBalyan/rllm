@@ -55,17 +55,18 @@ class MultiAgentBase(BaseAgent):
     
     def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
         
-        # Handle mixed observation format (collaboration context + base observation)
+        # Handle mixed observation format (chain context + base observation)
         actual_observation = observation
-        if isinstance(observation, dict) and "base_observation" in observation:
-            actual_observation = observation["base_observation"]
-        
-        # Extract Chain of Experts context if present
+        chain_context = None
         if isinstance(observation, dict):
-            if "collaboration_prompt" in observation:
-                self.multi_agent_context["collaboration"] = observation["collaboration_prompt"]
-            if "previous_agents" in observation:
-                self.multi_agent_context["previous_agents"] = observation["previous_agents"]
+            if "base_observation" in observation:
+                actual_observation = observation["base_observation"]
+            if "chain_context" in observation:
+                chain_context = observation["chain_context"]
+        
+        # Store chain context for use in chat_completions
+        if chain_context:
+            self.multi_agent_context["chain_context"] = chain_context
         
         # Create or update current step
         if not self._trajectory.steps or self._trajectory.steps[-1].done:
@@ -94,21 +95,10 @@ class MultiAgentBase(BaseAgent):
         return self._trajectory.steps[-1] if self._trajectory.steps else None
     
     def _format_multi_agent_context(self) -> str:
-        """Format Chain of Experts context into a readable prompt"""
-        context_parts = []
-        
-        if "collaboration" in self.multi_agent_context:
-            context_parts.append(f"CHAIN OF EXPERTS CONTEXT:\n{self.multi_agent_context['collaboration']}")
-        
-        if "previous_agents" in self.multi_agent_context:
-            agents_info = self.multi_agent_context["previous_agents"]
-            # Render detailed previous agent outputs
-            context_parts.append("PREVIOUS AGENTS CONTEXT:")
-            for agent_id, agent_text in agents_info.items():
-                preview = agent_text if len(str(agent_text)) <= 1200 else f"{str(agent_text)[:1200]}..."
-                context_parts.append(f"--- {agent_id.upper()} OUTPUT ---\n{preview}")
-        
-        return "\n\n".join(context_parts)
+        """Format simple chain context without duplication"""
+        if "chain_context" in self.multi_agent_context:
+            return f"CHAIN CONTEXT:\n{self.multi_agent_context['chain_context']}"
+        return ""
     
     def _parse_action(self, response: str) -> Any:
         """Parse action from model response - override in subclasses"""

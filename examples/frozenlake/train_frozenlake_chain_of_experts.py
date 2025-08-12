@@ -85,37 +85,46 @@ class FrozenLakeChainOfExpertsEnv(MultiAgentEnv):
         return getattr(self.base_env, name)
 
 
-def create_frozenlake_chain_of_experts_agents():
-    """Create the Chain of Experts agent configuration for FrozenLake"""
+def create_frozenlake_chain_of_experts_agents(config):
+    """Create agent configurations for FrozenLake Chain of Experts"""
+    from rllm.engine.multi_agent_execution_engine import AgentConfig, AgentRole
+    from rllm.agents.frozenlake_multi_agent import (
+        FrozenLakeProposerAgent,
+        FrozenLakeExpertAgent, 
+        FrozenLakeJudgeAgent
+    )
     
-    agents = [
+    # Get multi-agent configuration if it exists
+    multi_agent_section = config.get("multi_agent", {})
+    
+    agent_configs = [
         AgentConfig(
             agent_id="proposer",
             agent_class=FrozenLakeProposerAgent,
-            agent_args={"max_steps": 10},
+            agent_args={"max_steps": config.agent.max_steps},
             role=AgentRole.PROPOSER,
             temperature=0.7,
-            top_p=0.9
+            top_p=0.9,
         ),
         AgentConfig(
             agent_id="expert", 
             agent_class=FrozenLakeExpertAgent,
-            agent_args={"max_steps": 10},
+            agent_args={"max_steps": config.agent.max_steps},
             role=AgentRole.SPECIALIST,
-            temperature=0.7,
-            top_p=0.9
+            temperature=0.5,
+            top_p=0.8,
         ),
         AgentConfig(
             agent_id="judge",
-            agent_class=FrozenLakeJudgeAgent, 
-            agent_args={"max_steps": 10},
+            agent_class=FrozenLakeJudgeAgent,
+            agent_args={"max_steps": config.agent.max_steps},
             role=AgentRole.JUDGE,
-            temperature=0.7,
-            top_p=0.9
+            temperature=0.3,
+            top_p=0.7,
         )
     ]
     
-    return agents
+    return agent_configs
 
 
 @ray.remote(num_cpus=1)
@@ -201,7 +210,7 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
         agent_args=agent_args,
     )
 
-    agent_configs = create_frozenlake_chain_of_experts_agents()
+    agent_configs = create_frozenlake_chain_of_experts_agents(config)
     
     print("Created Chain of Experts agents:")
     for agent_config in agent_configs:

@@ -228,6 +228,7 @@ class AgentExecutionEngine:
 
     async def run_agent_trajectory_async(self, idx, application_id, seed=0, mode="Text", **kwargs):
         """Run a single agent's trajectory asynchronously"""
+        print("Running agent trajectory async", idx, application_id, seed, mode, kwargs)
         agent = self.agents[idx]
         env = self.envs[idx]
         # env_id = env.env_id
@@ -261,19 +262,19 @@ class AgentExecutionEngine:
             done=False,
             info=info,
         )
+        print("Update from env complete")
         messages = agent.chat_completions
+        print("Messages", messages)
         prompt_tokens, _ = convert_messages_to_tokens_and_masks(messages, tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=True, contains_generation_msg=True)
         prompt_token_len = len(prompt_tokens)
-        # Note, this should never happen!
         if prompt_token_len > self.max_prompt_length:
             agent.reset()
             raise Exception(f"Trajectory {idx}: initial prompt length {prompt_token_len} already exceeded max_prompt_length {self.max_prompt_length}, retrying")
 
         for step_idx in range(self.max_steps):
-            # Get action from agent
+            
             prompt_messages = agent.chat_completions.copy()
-            # Max remaining tokens left for the response
-            # For enforced max prompt at each step, no need to deduct here
+            print("Going to execute step", step_idx, "with prompt messages", prompt_messages)
             if not self.enforce_max_prompt_length:
                 max_tokens = self.max_response_length - response_token_len
             else:
@@ -290,6 +291,7 @@ class AgentExecutionEngine:
 
             start_time = time.time()
             response = await self.get_model_response(prompt_messages, application_id, **kwargs)
+            print("Response", response)
             delta_time = time.time() - start_time
             llm_time += delta_time
             total_time += delta_time
@@ -298,18 +300,44 @@ class AgentExecutionEngine:
                 "prompt": self.chat_parser.parse(prompt_messages, add_generation_prompt=True, is_first_msg=True),
                 "response": response,
             }
+            print("Prompt response pair", prompt_response_pair)
             episode_steps.append(prompt_response_pair)
-
+            print()
+            print()
+            print("episode_steps: ", episode_steps)
             # Update agent with model response
             action: Action = agent.update_from_model(response)
+            print("Action", action)
             action = action.action
 
             # Take step in environment using the executor
             start_time = time.time()
 
+            # Add detailed environment step logging
+            colorful_print("=" * 100, "white")
+            colorful_print(f"🌍 ENVIRONMENT STEP - Step {step_idx + 1}", "cyan")
+            colorful_print("=" * 100, "white")
+            colorful_print(f"📤 ACTION BEING EXECUTED:", "yellow")
+            colorful_print(f"    Action: {action}", "white")
+            colorful_print(f"    Action Type: {type(action)}", "white")
+            colorful_print("-" * 50, "white")
+
             try:
                 next_observation, reward, done, info = await asyncio.wait_for(loop.run_in_executor(self.executor, env.step, action), timeout=(self.trajectory_timeout - total_time))
+                
+                # Log environment response
+                colorful_print(f"📥 ENVIRONMENT RESPONSE:", "green")
+                colorful_print(f"    Next Observation: {next_observation}", "white")
+                colorful_print(f"    Reward: {reward}", "white")
+                colorful_print(f"    Done: {done}", "white")
+                colorful_print(f"    Info: {info}", "white")
+                colorful_print("=" * 100, "white")
+                colorful_print(f"✅ ENVIRONMENT STEP COMPLETE - Step {step_idx + 1}", "cyan")
+                colorful_print("=" * 100, "white")
+                
             except asyncio.TimeoutError:
+                colorful_print(f"⏰ ENVIRONMENT TIMEOUT - Step {step_idx + 1}", "red")
+                colorful_print("=" * 100, "white")
                 termination_reason = "ENV_TIMEOUT"
                 if step_idx == 0:
                     colorful_print(f"Warning: Trajectory {idx} completed due to: {termination_reason} before able to perform 1 complete action. This might cause unexpected behavior. Consider increasing trajectory timeout limit.\n", "red")
@@ -325,7 +353,7 @@ class AgentExecutionEngine:
             total_time += delta_time
             info["max_steps"] = self.max_steps
             info["cur_tokens"] = response_token_len
-
+            print("Going to update from env")
             # Update agent internal state.
             agent.update_from_env(
                 observation=next_observation,
@@ -341,7 +369,7 @@ class AgentExecutionEngine:
 
             chat_completions_messages = agent.chat_completions
             assistant_message, env_messages = get_recent_assistant_user_messages(chat_completions_messages)
-
+            print("completed update from env")
             # Check and convert to tokens if necessary
             assert assistant_message is not None or mode != "Token", "Assistant messages is none when accumulating token trajectories which should be conversations. This should not happen."
             assert env_messages is not None or mode != "Token", "Environment messages is none when accumulating token trajectories which should be conversations. This should not happen."
@@ -397,7 +425,9 @@ class AgentExecutionEngine:
 
             response_tokens.extend(env_msg_tokens)
             response_masks.extend(env_msg_masks)
-
+            print("Completed step", step_idx)
+            print()
+            print()
             if step_idx == self.max_steps - 1:
                 termination_reason = "MAX_STEPS"
 
@@ -469,6 +499,7 @@ class AgentExecutionEngine:
             return steps_result
 
     async def run_agent_trajectory_with_retry(self, idx, application_id, seed=0, mode="Text", **kwargs):
+        print("Running agent trajectory with retry", idx, application_id, seed, mode, kwargs)
         for _ in range(self.retry_limit):
             try:
                 return await asyncio.wait_for(self.run_agent_trajectory_async(idx, application_id=application_id, seed=seed, mode=mode, **kwargs), timeout=7200)
