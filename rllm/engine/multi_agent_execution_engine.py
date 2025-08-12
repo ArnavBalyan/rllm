@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 
-from rllm.agents.agent import Action, BaseAgent, Trajectory
+from rllm.agents.agent import Action, BaseAgent, Trajectory, Step
 from rllm.engine.agent_execution_engine import AgentExecutionEngine
 from rllm.environments.base.base_env import BaseEnv
 from rllm.misc import colorful_print
@@ -134,39 +134,37 @@ class ChainOfExpertsWorkflow(BaseWorkflow):
         return phase_outputs
 
 
-class MultiAgentExecutionEngine(AgentExecutionEngine):
+class MultiAgentExecutionEngine:
+    """
+    Multi-agent execution engine that directly orchestrates workflows without wrapper agents.
+    
+    This engine manages multiple individual AgentExecutionEngines and coordinates their
+    execution according to the defined workflow phases and connections.
+    """
+    
     def __init__(self, workflow: BaseWorkflow, env_class, *, env_args=None,
                  engine_name="verl", tokenizer=None, rollout_engine=None,
-                 config=None, trajectory_timeout=None, max_workers=64, **kwargs):
+                 config=None, trajectory_timeout=None, max_workers=64, max_steps=10, **kwargs):
         self.workflow = workflow
         self.agent_cfgs, self.phases, self.connections = workflow.define_workflow()
-
-        # Create individual execution engines for each agent (no coordinator)
+        self.max_steps = max_steps
+        self.trajectory_timeout = trajectory_timeout
+        self.env_class = env_class
+        self.env_args = env_args or {}
+        self.envs = []
+        
+        # Create individual execution engines for each agent
         self.role_engines = self._init_role_engines(
             env_class, env_args, tokenizer, rollout_engine,
             config, trajectory_timeout, max_workers, engine_name, **kwargs
         )
-
-        # Initialize as regular execution engine but with workflow agent class
-        super().__init__(
-            engine_name=engine_name,
-            tokenizer=tokenizer,
-            rollout_engine=rollout_engine,
-            config=config,
-            agent_class=WorkflowAgent,  # New clean workflow agent
-            agent_args=dict(
-                phases=self.phases,
-                connections=self.connections,
-                agent_cfgs=self.agent_cfgs,
-                role_engines=self.role_engines,
-            ),
-            env_class=env_class,
-            env_args=env_args or {},
-            max_steps=self.agent_cfgs[0].agent_args.get("max_steps", 10),
-            trajectory_timeout=trajectory_timeout,
-            max_workers=max_workers,
-            n_parallel_agents=1,
-        )
+        
+        # Create individual agents for each role
+        self.agents: Dict[str, BaseAgent] = {}
+        for cfg in self.agent_cfgs:
+            engine = self.role_engines[cfg.agent_id]
+            agent_init_args = engine.agent_args.copy()
+            self.agents[cfg.agent_id] = engine.agent_class(agent_id=cfg.agent_id, **agent_init_args)
 
     def _init_role_engines(self, env_class, env_args, tokenizer, rollout_engine, config, trajectory_timeout, max_workers, engine_name, **kwargs):
         role_engines = {}
@@ -205,86 +203,261 @@ class MultiAgentExecutionEngine(AgentExecutionEngine):
         return role_engines
     
     def update_envs_and_agents(self, envs: List[BaseEnv]):
+        """Update environments for the multi-agent workflow"""
         self.envs = envs
+        colorful_print(f"🌍 Updated {len(envs)} environments for multi-agent workflow", "green")
+    
+    async def run_workflow_trajectory_async(self, env_idx: int, application_id: str, seed: int = 0, mode: str = "Token", **kwargs) -> Dict[str, Any]:
+        """
+        Execute a complete workflow trajectory for a single environment.
         
-        # Create WorkflowAgent instances for each environment
-        workflow_agents = []
-        for i, env in enumerate(envs):
-            workflow_agent = WorkflowAgent(
-                agent_id=f"workflow_agent_{i}",
-                phases=self.phases,
-                connections=self.connections,
-                agent_cfgs=self.agent_cfgs,
-                role_engines=self.role_engines,
-            )
-            workflow_agents.append(workflow_agent)
+        This replaces the single-agent trajectory execution with multi-agent workflow orchestration.
+        """
+        env = self.envs[env_idx]
+        trajectory = Trajectory()
         
-        super().update_envs_and_agents(envs, workflow_agents)
+        colorful_print(f"\n{'='*100}", "cyan")
+        colorful_print(f"🚀 Starting Workflow Trajectory {env_idx} - {self.workflow.workflow_id}", "cyan")
+        colorful_print(f"{'='*100}", "cyan")
+        
+        # Reset environment
+        loop = asyncio.get_event_loop()
+        observation, info = await loop.run_in_executor(None, env.reset)
+        info["max_steps"] = self.max_steps
+        
+        # Reset all agents
+        for agent_id, agent in self.agents.items():
+            agent.reset()
+            colorful_print(f"🔄 Reset {agent_id}", "yellow")
+        
+        total_reward = 0.0
+        final_tokens = []
+        final_masks = []
+        chat_completions = []
+        
+        # Execute workflow for each environment step
+        for step_idx in range(self.max_steps):
+            colorful_print(f"\n🔢 Environment Step {step_idx + 1}/{self.max_steps}", "blue")
+            
+            # Update all agents with current environment state
+            for agent_id, agent in self.agents.items():
+                agent.update_from_env(observation, 0.0, False, info)
+            
+            # Execute workflow phases sequentially
+            phase_responses = {}
+            final_action = None
+            
+            for phase_idx, phase in enumerate(self.phases):
+                agent_id = phase.agent_ids[0]  # Chain of experts: one agent per phase
+                agent = self.agents[agent_id]
+                engine = self.role_engines[agent_id]
+                
+                colorful_print(f"🎯 Phase {phase_idx + 1}: {agent_id.upper()}", "yellow")
+                
+                # Inject context from previous phases
+                self._inject_workflow_context(agent_id, phase_responses)
+                
+                # Get LLM response
+                prompt_msgs = agent.chat_completions
+                response = await engine.get_model_response(
+                    prompt_msgs, 
+                    application_id, 
+                    max_tokens=engine.max_response_length,
+                    **engine.sampling_params
+                )
+                
+                # Update agent with response and get action
+                action = agent.update_from_model(response)
+                phase_responses[agent_id] = response
+                final_action = action
+                
+                colorful_print(f"✅ {agent_id} → Action: {action.action}", "green")
+            
+            # Execute final action in environment
+            if final_action:
+                observation, reward, done, info = await loop.run_in_executor(
+                    None, env.step, final_action.action
+                )
+                total_reward += reward
+                
+                # Store step in trajectory
+                step = Step(
+                    observation=observation,
+                    model_response=f"Workflow: {' → '.join(phase_responses.keys())}",
+                    action=final_action.action,
+                    reward=reward,
+                    done=done,
+                    info=info.copy()
+                )
+                trajectory.steps.append(step)
+                
+                # Collect final agent's tokens for training
+                final_agent_id = self.phases[-1].agent_ids[0]
+                final_agent = self.agents[final_agent_id]
+                if hasattr(final_agent, 'chat_completions'):
+                    chat_completions = final_agent.chat_completions
+                
+                if done:
+                    colorful_print(f"🏁 Environment episode complete at step {step_idx + 1}", "green")
+                    break
+        
+        colorful_print(f"🎉 Workflow trajectory complete! Total reward: {total_reward}", "green")
+        
+        # Return result in expected format for training
+        if mode == "Token":
+            # Convert final agent's messages to tokens for training
+            final_agent_id = self.phases[-1].agent_ids[0]
+            final_agent = self.agents[final_agent_id]
+            
+            from rllm.agents.utils import convert_messages_to_tokens_and_masks
+            
+            if hasattr(final_agent, 'chat_completions') and final_agent.chat_completions:
+                try:
+                    engine = self.role_engines[final_agent_id]
+                    prompt_tokens, response_tokens = convert_messages_to_tokens_and_masks(
+                        final_agent.chat_completions,
+                        tokenizer=engine.tokenizer,
+                        parser=engine.chat_parser,
+                        contains_first_msg=True,
+                        contains_generation_msg=True
+                    )
+                    response_masks = torch.ones_like(response_tokens)
+                except Exception as e:
+                    colorful_print(f"⚠️ Token conversion failed: {e}", "yellow")
+                    prompt_tokens = torch.empty(0, dtype=torch.long)
+                    response_tokens = torch.empty(0, dtype=torch.long)
+                    response_masks = torch.empty(0, dtype=torch.long)
+            else:
+                prompt_tokens = torch.empty(0, dtype=torch.long)
+                response_tokens = torch.empty(0, dtype=torch.long)
+                response_masks = torch.empty(0, dtype=torch.long)
+            
+            return {
+                "idx": env_idx,
+                "trajectory_reward": total_reward,
+                "prompt_tokens": prompt_tokens,
+                "response_tokens": response_tokens,
+                "response_masks": response_masks,
+                "chat_completions": chat_completions,
+                "metrics": {
+                    "workflow_steps": len(trajectory.steps),
+                    "phases_executed": len(self.phases),
+                    "total_reward": total_reward
+                }
+            }
+        else:
+            return {
+                "idx": env_idx,
+                "trajectory": trajectory,
+                "total_reward": total_reward,
+                "chat_completions": chat_completions
+            }
+    
+    def _inject_workflow_context(self, current_agent_id: str, phase_responses: Dict[str, str]):
+        """Inject context from previous phases into current agent"""
+        context_parts = []
+        
+        # Find connections to current agent and add context from previous responses
+        for conn in self.connections:
+            if conn.to_agent == current_agent_id and conn.from_agent in phase_responses:
+                context_parts.append(f"Input from {conn.from_agent.upper()}: {phase_responses[conn.from_agent]}")
+        
+        if context_parts:
+            chain_context = "\n\n".join(context_parts)
+            current_agent = self.agents[current_agent_id]
+            if hasattr(current_agent, 'multi_agent_context'):
+                current_agent.multi_agent_context["chain_context"] = chain_context
+                colorful_print(f"📥 Injected context into {current_agent_id}: {len(chain_context)} chars", "cyan")
+    
+    async def trajectory_generator(self, reset_seed=0, timing_raw=None, mode="Token", **kwargs):
+        """Generate trajectories for all environments using workflow execution"""
+        if timing_raw is None:
+            timing_raw = {}
+        
+        assert all(env is not None and isinstance(env, BaseEnv) for env in self.envs), "All environments must be inheriting from BaseEnv"
+        assert all(env.is_multithread_safe() for env in self.envs), "All environments must be multithread safe for async engine"
+        
+        max_concurrency = len(self.envs)
+        
+        async def launch_workflow_trajectory(env_idx: int):
+            try:
+                application_id = str(uuid.uuid4())
+                result = await self.run_workflow_trajectory_async(
+                    env_idx=env_idx,
+                    application_id=application_id,
+                    seed=reset_seed,
+                    mode=mode,
+                    **kwargs
+                )
+                return result
+            except Exception as e:
+                colorful_print(f"❌ Workflow trajectory {env_idx} failed: {e}", "red")
+                traceback.print_exc()
+                raise e
+        
+        # Execute all workflow trajectories
+        tasks = [launch_workflow_trajectory(i) for i in range(len(self.envs))]
+        
+        for task in asyncio.as_completed(tasks):
+            try:
+                result = await task
+                yield result
+            except Exception as e:
+                colorful_print(f"❌ Workflow execution failed: {e}", "red")
+                raise e
     
     def execute_chain_of_experts_batch(
         self, 
         timing_raw: Dict[str, Any] = None, 
         meta_info: Dict[str, Any] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Execute Chain of Experts on a training batch.        
-        Each environment step goes through the complete chain sequentially.
-        
-        Returns:
-            List of workflow results for each item in the batch
-        """
+        """Execute Chain of Experts workflow on a training batch"""
         batch_size = len(self.envs)
+        colorful_print(f"🚀 Starting Chain of Experts batch execution with {batch_size} environments", "cyan")
         
-        is_validation = meta_info.get("validate", False)
-        print("Reached multi agent execution engine with batch size", batch_size)
-        results = []
-        async def _collect():
+        async def _collect_batch():
             batch = []
-            async for traj in self.trajectory_generator(timing_raw=timing_raw, mode="Token", **meta_info):
+            async for traj in self.trajectory_generator(timing_raw=timing_raw, mode="Token", **meta_info or {}):
                 batch.append(traj)
             return batch
+        
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor() as ex:
-                    fut = ex.submit(asyncio.run, _collect())
-                    batch_timeout = meta_info.get('batch_execution_timeout', self.trajectory_timeout)
+                    fut = ex.submit(asyncio.run, _collect_batch())
+                    batch_timeout = meta_info.get('batch_execution_timeout', self.trajectory_timeout) if meta_info else self.trajectory_timeout
                     results = fut.result(timeout=batch_timeout)
             else:
-                results = loop.run_until_complete(_collect())
+                results = loop.run_until_complete(_collect_batch())
         except Exception as e:
             raise RuntimeError(f"Chain of Experts batch execution failed: {str(e)}") from e
-        print("Multi agent execution batch complete, all trajectories across all steps done, will exit now")
+        
+        colorful_print(f"✅ Chain of Experts batch complete with {len(results)} results", "green")
         return self._format_results_for_training(results)
     
     def _format_results_for_training(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Format the chain trajectory for PPO training.
-        
-        The training expects specific format with tokens, rewards, etc.
-        """
+        """Format workflow results for PPO training"""
         if not results:
-            raise RuntimeError("Chain of Experts execution produced no results - this indicates a critical system failure")
+            raise RuntimeError("Chain of Experts execution produced no results")
         
         formatted_results = []
         for i, token_result in enumerate(results):
             if not token_result:
-                raise RuntimeError(f"Chain of Experts result {i} is empty - this indicates incomplete trajectory execution")
+                raise RuntimeError(f"Chain of Experts result {i} is empty")
             
             # Validate required fields
             required_fields = ["trajectory_reward", "chat_completions"]
             for field in required_fields:
                 if field not in token_result:
                     colorful_print(f"❌ Missing required field '{field}' in result {i}", "red")
-                    raise ValueError(f"Chain of Experts result validation failed: missing required field '{field}' in trajectory result {i}")
+                    raise ValueError(f"Missing required field '{field}' in trajectory result {i}")
             
-            # token_result keys documented in AgentExecutionEngine.run_agent_trajectory_async (mode="Token")
             formatted_results.append({
                 "workflow_type": self.workflow.workflow_id,
                 "batch_idx": token_result.get("idx", 0),
                 "agent_trajectories": {
-                    # attribute to final agent id for reward accounting
+                    # Attribute to final agent for reward accounting
                     self.phases[-1].agent_ids[0]: {
                         "prompt_tokens": token_result.get("prompt_tokens", torch.empty(0, dtype=torch.long)),
                         "response_tokens": token_result.get("response_tokens", torch.empty(0, dtype=torch.long)),
@@ -299,183 +472,4 @@ class MultiAgentExecutionEngine(AgentExecutionEngine):
         
         colorful_print(f"✅ Successfully formatted {len(formatted_results)} Chain of Experts results", "green")
         return formatted_results
-
-
-class WorkflowAgent(BaseAgent):
-    """
-    Clean workflow agent that manages multiple internal agents following single agent paradigm.
-    Executes agents sequentially according to workflow phases and passes context between them.
-    """
-    
-    def __init__(self, agent_id: str, phases: List[WorkflowPhase], connections: List[WorkflowConnection], 
-                 agent_cfgs: List[AgentConfig], role_engines: Dict[str, AgentExecutionEngine]):
-        super().__init__()
-        self.agent_id = agent_id
-        self.phases = phases
-        self.connections = connections
-        self.agent_cfgs = {cfg.agent_id: cfg for cfg in agent_cfgs}
-        self.role_engines = role_engines
         
-        # Create internal agents
-        self.internal_agents: Dict[str, BaseAgent] = {}
-        for cfg in agent_cfgs:
-            engine = role_engines[cfg.agent_id]
-            agent_init_args = engine.agent_args.copy()
-            self.internal_agents[cfg.agent_id] = engine.agent_class(agent_id=cfg.agent_id, **agent_init_args)
-
-        from rllm.agents.agent import Trajectory
-        self._trajectory = Trajectory()
-        self._current_observation = None
-        self._current_reward = 0.0
-        self._current_done = False
-        self._current_info = {}
-        
-    def reset(self):
-        """Reset all internal agents and workflow state"""
-        for agent_id, agent in self.internal_agents.items():
-            agent.reset()
-            colorful_print(f"🔄 Reset {agent_id} for new episode", "yellow")
-        
-        from rllm.agents.agent import Trajectory
-        self._trajectory = Trajectory()
-        self._current_observation = None
-        self._current_reward = 0.0
-        self._current_done = False
-        self._current_info = {}
-        
-        colorful_print(f"✅ WorkflowAgent reset complete", "green")
-
-    @property
-    def chat_completions(self) -> list[dict]:
-        """Return the first agent's chat completions to bootstrap the workflow"""
-        # The workflow starts with the first phase's agent
-        if self.phases:
-            first_agent_id = self.phases[0].agent_ids[0]
-            first_agent = self.internal_agents[first_agent_id]
-            return first_agent.chat_completions
-        else:
-            # Fallback if no phases defined
-            return [{"role": "system", "content": "Empty workflow - no phases defined"}]
-
-    def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
-        """Update all internal agents with environment state for chain execution"""
-        colorful_print(f"🌍 WorkflowAgent updating all agents from environment", "cyan")
-        
-        # Store current environment state
-        self._current_observation = observation
-        self._current_reward = reward
-        self._current_done = done
-        self._current_info = info
-        
-        # Update all internal agents with the same environment state
-        # They will all need access to the current observation for the chain execution
-        for agent_id, agent in self.internal_agents.items():
-            colorful_print(f"📤 Updating {agent_id} with environment state", "yellow")
-            agent.update_from_env(observation, reward, done, info, **kwargs)
-        
-    def update_from_model(self, response: str, **kwargs) -> Action:
-        """Execute the complete workflow chain within this single step"""
-        colorful_print(f"\n{'='*100}", "cyan")
-        colorful_print(f"🔗 WORKFLOW EXECUTION - Sequential Agent Chain", "cyan")
-        colorful_print(f"{'='*100}", "cyan")
-        
-        # Execute all agents in the workflow sequentially
-        previous_responses: Dict[str, str] = {}
-        final_action = None
-        
-        for phase_idx, phase in enumerate(self.phases):
-            agent_id = phase.agent_ids[0]
-            agent = self.internal_agents[agent_id]
-            engine = self.role_engines[agent_id]
-            
-            colorful_print(f"\n🎯 Phase {phase_idx + 1}/{len(self.phases)}: {agent_id.upper()}", "yellow")
-            colorful_print("-" * 50, "white")
-            
-            # Inject context from previous agents in this chain
-            self._inject_chain_context(agent_id, previous_responses)
-            
-            # Make LLM call for this agent
-            prompt_msgs = agent.chat_completions
-            colorful_print(f"🤖 Making LLM call for {agent_id}", "blue")
-            
-            # Get real LLM response using the agent's dedicated engine
-            agent_response = self._get_agent_response(engine, agent)
-            
-            # Update agent with response
-            action = agent.update_from_model(agent_response, **kwargs)
-            previous_responses[agent_id] = agent_response
-            final_action = action
-            
-            colorful_print(f"✅ {agent_id} complete → action: {action.action}", "green")
-        
-        # Store the complete workflow step
-        from rllm.agents.agent import Step
-        step = Step(
-            observation=self._current_observation,
-            model_response=f"Chain execution: {' → '.join(previous_responses.keys())}",
-            action=final_action.action if final_action else "0",
-            reward=self._current_reward,
-            done=self._current_done,
-            info=self._current_info.copy()
-        )
-        self._trajectory.steps.append(step)
-        
-        colorful_print(f"\n🎉 Complete workflow chain executed! Final action: {final_action.action if final_action else '0'}", "green")
-        colorful_print(f"{'='*100}", "cyan")
-        
-        return final_action if final_action else Action(action="0")
-    
-    def _inject_chain_context(self, current_agent_id: str, previous_responses: Dict[str, str]):
-        """Inject context from previous agents in the current chain execution"""
-        context_parts = []
-        
-        # Find connections to current agent and add context from previous responses
-        for conn in self.connections:
-            if conn.to_agent == current_agent_id and conn.from_agent in previous_responses:
-                context_parts.append(f"Input from {conn.from_agent.upper()}: {previous_responses[conn.from_agent]}")
-                
-        if context_parts:
-            chain_context = "\n\n".join(context_parts)
-            current_agent = self.internal_agents[current_agent_id]
-            if hasattr(current_agent, 'multi_agent_context'):
-                current_agent.multi_agent_context["chain_context"] = chain_context
-                colorful_print(f"📥 Injected context into {current_agent_id}: {len(chain_context)} chars", "cyan")
-    
-    def _get_agent_response(self, engine: AgentExecutionEngine, agent: BaseAgent) -> str:
-        """Get LLM response for a specific agent using its dedicated engine"""
-        import asyncio
-        import uuid
-        
-        async def _get_response():
-            application_id = str(uuid.uuid4())
-            prompt_msgs = agent.chat_completions
-            
-            colorful_print(f"📤 Sending {len(prompt_msgs)} messages to LLM", "blue")
-            response = await engine.get_model_response(
-                prompt_msgs, 
-                application_id, 
-                max_tokens=engine.max_response_length, 
-                **engine.sampling_params
-            )
-            colorful_print(f"📥 Received response: {response[:100]}{'...' if len(response) > 100 else ''}", "green")
-            return response
-        
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're in an async context, we need to handle this differently
-                # For now, return a mock response - in production this needs proper async handling
-                return f"```Right``` [Agent: {agent.agent_id}]"
-            else:
-                return loop.run_until_complete(_get_response())
-        except Exception as e:
-            colorful_print(f"❌ LLM call failed for {agent.agent_id}: {e}", "red")
-            return f"```Right``` [Error fallback for {agent.agent_id}]"
-        
-    @property
-    def trajectory(self) -> Trajectory:
-        return self._trajectory
-        
-    def get_current_state(self):
-        return self._trajectory.steps[-1] if self._trajectory.steps else None
-    
