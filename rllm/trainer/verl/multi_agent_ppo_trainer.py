@@ -38,6 +38,7 @@ from verl.trainer.ppo.ray_trainer import (
     compute_timing_metrics,
     reduce_metrics,
 )
+from rllm.misc import colorful_print
 
 
 class MultiAgentPPOTrainer(AgentPPOTrainer):
@@ -107,6 +108,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             else:
                 rollout_engine = agent_rollout_wg
 
+            # Create multi-agent execution engine first
             self.multi_agent_engine = MultiAgentExecutionEngine(
                 workflow=self.workflow,
                 env_class=self.env_class,
@@ -120,6 +122,19 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 trajectory_timeout=self.config.agent.trajectory_timeout,
                 **self.config.agent.get("engine_args", {}),
             )
+            
+            # MINIMAL FIX: Replace base trainer's rollout engine with final agent's engine
+            # This ensures the final agent's model (Judge) is used for PPO training
+            final_agent_id = self.workflow.agent_configs_list[-1].agent_id
+            final_agent_engine = self.multi_agent_engine.role_engines[final_agent_id]
+            
+            # Replace the trainer's rollout engines with the final agent's engine
+            if self.hybrid_engine:
+                self.actor_rollout_wg = final_agent_engine.rollout_engine
+            else:
+                self.rollout_wg = final_agent_engine.rollout_engine
+                
+                colorful_print(f"🔄 Replaced base trainer rollout engine with final agent ({final_agent_id}) engine", "green")
     
     def init_envs_and_agents(self, batch):
         """Initialize environments and agents for multi-agent training"""
@@ -379,9 +394,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         timing_raw=timing_raw, 
                         meta_info=batch.meta_info
                     )
-
-                    print("Generation complete, going to crash!")
-                    import os; os._exit(1)
 
                     batch = batch.union(final_gen_batch_output)
                     metrics.update(generate_metrics)
