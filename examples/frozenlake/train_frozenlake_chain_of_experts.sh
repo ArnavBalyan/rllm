@@ -7,11 +7,6 @@ export VLLM_USE_V1=1
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
 
-echo "Starting FrozenLake Chain of Experts Training"
-echo "Workflow: Proposer → Expert → Judge"
-echo "Batch size: 1"
-echo "=" 
-
 RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dirname(rllm.__file__)))")
 
 python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
@@ -81,4 +76,4 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     +agent.agent_args.use_accumulate_history=True \
     trainer.total_epochs=1
 
-echo "FrozenLake Chain of Experts training completed!" 
+echo "FrozenLake Multi-Agent training completed!" 

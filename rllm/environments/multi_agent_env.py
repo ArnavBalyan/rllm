@@ -15,17 +15,14 @@ class MultiAgentEnv(BaseEnv):
         self.current_agent_id: Optional[str] = None
         
     def reset(self) -> Tuple[Dict, Dict]:
-        """Standard reset without multi-agent input"""
         self.multi_agent_context = {}
         self.agent_history = []
         self.current_agent_id = None
         return self._create_observation(), self._create_info()
     
     def reset_with_input(self, agent_input: Dict[str, Any]) -> Tuple[Dict, Dict]:
-        """Reset with input from previous agents in the Chain of Experts"""
         self.multi_agent_context = agent_input
         
-        # Process input from previous agents
         self._process_multi_agent_input(agent_input)
         
         observation = self._create_observation_with_context()
@@ -34,8 +31,6 @@ class MultiAgentEnv(BaseEnv):
         return observation, info
     
     def _process_multi_agent_input(self, agent_input: Dict[str, Any]):
-        """Process input from previous agents in the chain"""
-        # Store previous agent outputs
         for source_agent, agent_output in agent_input.items():
             if isinstance(agent_output, dict) and "response" in agent_output:
                 self.agent_history.append({
@@ -46,19 +41,15 @@ class MultiAgentEnv(BaseEnv):
     
     @abstractmethod
     def _create_observation(self) -> Dict[str, Any]:
-        """Create observation for single-agent mode"""
         pass
     
     @abstractmethod  
     def _create_info(self) -> Dict[str, Any]:
-        """Create info for single-agent mode"""
         pass
     
     def _create_observation_with_context(self) -> Dict[str, Any]:
-        """Create observation with Chain of Experts context"""
         base_obs = self._create_observation()
         
-        # Add Chain of Experts context to observation
         if self.agent_history:
             base_obs["previous_agents"] = self.agent_history
             base_obs["collaboration_prompt"] = self._format_collaboration_prompt()
@@ -66,7 +57,6 @@ class MultiAgentEnv(BaseEnv):
         return base_obs
     
     def _create_info_with_context(self) -> Dict[str, Any]:
-        """Create info with Chain of Experts context"""
         base_info = self._create_info()
         base_info["multi_agent_mode"] = True
         base_info["current_agent"] = self.current_agent_id
@@ -74,7 +64,6 @@ class MultiAgentEnv(BaseEnv):
         return base_info
     
     def _format_collaboration_prompt(self) -> str:
-        """Format a prompt including previous agent responses in the chain"""
         if not self.agent_history:
             return ""
         

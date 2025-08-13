@@ -24,25 +24,21 @@ from rllm.trainer.verl.multi_agent_ppo_trainer import (
 
 class FrozenLakeChainOfExpertsEnv(MultiAgentEnv):
     """
-    FrozenLake environment adapted for Chain of Experts workflow.
-    
-    Inherits from MultiAgentEnv to handle context passing between agents.
+    FrozenLake environment Chain of Experts.
+    Inherits from MultiAgentEnv manages context between agents.
     """
     
     def __init__(self, **kwargs):
-        # Initialize base FrozenLake environment
         self.base_env = FrozenLakeEnv(**kwargs)
         super().__init__()
     
     def _create_observation(self):
         """Create observation for single-agent mode"""
-        # Delegate to base environment's reset to get observation
         obs, _ = self.base_env.reset()
         return obs
     
     def _create_info(self):
         """Create info for single-agent mode"""
-        # Get info from base environment
         _, info = self.base_env.reset()
         return info
     
@@ -94,7 +90,6 @@ def create_frozenlake_chain_of_experts_agents(config):
         FrozenLakeJudgeAgent
     )
     
-    # Get multi-agent configuration if it exists
     multi_agent_section = config.get("multi_agent", {})
     
     agent_configs = [
@@ -131,7 +126,7 @@ def create_frozenlake_chain_of_experts_agents(config):
 def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, agent_args=None, env_args=None):
     """
     Multi-agent training function that sets up all required infrastructure.
-    Based on train_agent_ppo.py but adapted for Chain of Experts.
+    train_agent_ppo.py for FrozenLake Chain of Experts.
     """
     from pprint import pprint
     from omegaconf import OmegaConf
@@ -145,10 +140,8 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
     pprint(OmegaConf.to_container(config, resolve=True))
     OmegaConf.resolve(config)
 
-    # Download the checkpoint from hdfs
     local_path = copy_local_path_from_hdfs(config.actor_rollout_ref.model.path)
 
-    # Instantiate tokenizer
     trust_remote_code = config.data.get("trust_remote_code", False)
     tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code)
 
@@ -182,7 +175,6 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
     val_reward_fn = load_reward_manager(config, tokenizer, num_examine=1)
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 
-    # Use the classes passed in or defaults
     if env_class is None:
         env_class = FrozenLakeChainOfExpertsEnv
     if agent_class is None:
@@ -195,7 +187,6 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
     if config.agent.get("agent_args") is not None:
         agent_args.update(config.agent.get("agent_args"))
 
-    # Hacky way to pass the default configs to the trainer, todo: move this to a centralized config management in the future.
     base_trainer = AgentPPOTrainer(
         config=config,
         tokenizer=tokenizer,
@@ -212,13 +203,12 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
 
     agent_configs = create_frozenlake_chain_of_experts_agents(config)
     
-    print("Created Chain of Experts agents:")
     for agent_config in agent_configs:
         print(f"  - {agent_config.agent_id} ({agent_config.role.value}): {agent_config.agent_class.__name__}")
 
     multi_agent_config = {
-        "training_mode": "final_agent",  # Train on final judge's decision
-        "reward_aggregation": "final_agent",  # Use final judge's reward
+        "training_mode": "final_agent",  
+        "reward_aggregation": "final_agent",
     }
 
     trainer = create_chain_of_experts_trainer(
@@ -227,11 +217,6 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
         multi_agent_config=multi_agent_config
     )
     
-    print("Created Chain of Experts trainer")
-    print(f"   Training mode: {multi_agent_config['training_mode']}")
-    print(f"   Reward aggregation: {multi_agent_config['reward_aggregation']}")
-    print("=" * 60)
-
     trainer.init_workers()
     trainer.fit_multi_agent()
     
@@ -245,11 +230,9 @@ def main(config: DictConfig):
     print("Starting FrozenLake Chain of Experts Training")
     print("=" * 60)
     
-    # Initialize Ray if not already initialized
     if not ray.is_initialized():
         ray.init(runtime_env={"env_vars": {"TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN"}})
 
-    # Start the training process
     ray.get(train_frozenlake_chain_of_experts.remote(
         config, 
         agent_class=FrozenLakeProposerAgent, 
