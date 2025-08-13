@@ -186,21 +186,17 @@ Now it is your turn, please show your thinking process and put the final action 
 
         if matches:
             last_match_content = matches[-1].strip()
-            print(f"🔍 [FrozenLakeAgent] Last match content: '{last_match_content}'")
-            
             last_match_index = response.rfind(f"```{last_match_content}```")
             if last_match_index != -1:
                 thought = response[:last_match_index].strip()
 
             extracted_text = last_match_content.lower()
-            print(f"🔍 [FrozenLakeAgent] Extracted text (lowercase): '{extracted_text}'")
 
             if extracted_text in DIRECTION_MAP:
                 action_str = str(DIRECTION_MAP[extracted_text])
-                print(f"✅ [FrozenLakeAgent] Found direction '{extracted_text}' -> action {action_str}")
             elif extracted_text.isdigit() and int(extracted_text) in DIRECTION_MAP.values():
                 action_str = str(int(extracted_text))
-            
+
         return thought, action_str
 
     def _process_action_for_validation(self, response: str) -> str:

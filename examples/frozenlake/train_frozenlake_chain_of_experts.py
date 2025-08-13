@@ -33,56 +33,45 @@ class FrozenLakeChainOfExpertsEnv(MultiAgentEnv):
         super().__init__()
     
     def _create_observation(self):
-        """Create observation for single-agent mode"""
         obs, _ = self.base_env.reset()
         return obs
     
     def _create_info(self):
-        """Create info for single-agent mode"""
         _, info = self.base_env.reset()
         return info
     
     def reset(self):
-        """Reset the environment for a new episode"""
         observation, info = self.base_env.reset()
         self.multi_agent_context = {}
         self.agent_history = []
         return observation, info
     
     def reset_with_input(self, agent_input):
-        """Reset with input from previous agents in the chain"""
         super().reset_with_input(agent_input)
         observation, info = self.base_env.reset()
         return observation, info
     
     def step(self, action):
-        """Take a step in the environment"""
         return self.base_env.step(action)
     
     def render(self, *args, **kwargs):
-        """Render the environment"""
         return self.base_env.render(*args, **kwargs)
     
     def finished(self):
-        """Check if episode is finished"""
         return self.base_env.finished()
     
     def success(self):
-        """Check if goal was reached"""
         return self.base_env.success()
     
     @classmethod
     def from_dict(cls, env_dict):
-        """Create environment from dictionary (required for dataset loading)"""
         return cls(**env_dict)
     
     def __getattr__(self, name):
-        """Forward all other attributes to base environment"""
         return getattr(self.base_env, name)
 
 
 def create_frozenlake_chain_of_experts_agents(config):
-    """Create agent configurations for FrozenLake Chain of Experts"""
     from rllm.engine.multi_agent_execution_engine import AgentConfig, AgentRole
     from rllm.agents.frozenlake_multi_agent import (
         FrozenLakeProposerAgent,
@@ -126,7 +115,6 @@ def create_frozenlake_chain_of_experts_agents(config):
 def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, agent_args=None, env_args=None):
     """
     Multi-agent training function that sets up all required infrastructure.
-    train_agent_ppo.py for FrozenLake Chain of Experts.
     """
     from pprint import pprint
     from omegaconf import OmegaConf

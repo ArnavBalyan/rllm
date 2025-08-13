@@ -54,12 +54,13 @@ class WorkflowConnection:
 class WorkflowPhase:
     """
     Represents a logical execution phase in the multi-agent workflow.
+    The workflow is a Directed Acyclic Graph (DAG) of agents connected by connections.
+    Please make sure to not introduce cyclic dependency between agents.
     
     A phase is a collection of agents that execute together in a specific mode:
-    - Eg. Chain of Experts, each phase contains exactly one agent
+    - Eg. Chain of Experts, each phase contains exactly one agent in a linear chain
     - The phase defines how agents execute (sequential/parallel) and which agents participate
     
-    Note: This is different from a "step" which refers to one turn of conversation/action.
     """
     phase_id: str
     agent_ids: List[str]  
@@ -196,16 +197,9 @@ class MultiAgentExecutionEngine:
         return role_engines
     
     def update_envs_and_agents(self, envs: List[BaseEnv]):
-        """Update environments for the multi-agent workflow"""
         self.envs = envs
-        colorful_print(f"🌍 Updated {len(envs)} environments for multi-agent workflow", "green")
     
     async def run_workflow_trajectory_async(self, env_idx: int, application_id: str, seed: int = 0, mode: str = "Token", **kwargs) -> Dict[str, Any]:
-        """
-        Execute a complete workflow trajectory for a single environment.
-        
-        This replaces the single-agent trajectory execution with multi-agent workflow orchestration.
-        """
         env = self.envs[env_idx]
         trajectory = Trajectory()
         
@@ -253,13 +247,6 @@ class MultiAgentExecutionEngine:
                 action = agent.update_from_model(response)
                 phase_responses[agent_id] = response
                 final_action = action
-
-                # dev: quick summary, should make prints configurable throughout in future
-                colorful_print(f"\n ACTION RESULT:", "magenta")
-                colorful_print(f"   Agent: {agent_id}", "white")
-                colorful_print(f"   Action Type: {type(action).__name__}", "white")
-                colorful_print(f"   Action Value: {action.action}", "white")
-                colorful_print(f"   Phase Complete", "green")
             
             if final_action:
                 observation, reward, done, info = await loop.run_in_executor(
@@ -294,7 +281,6 @@ class MultiAgentExecutionEngine:
         
         
         if mode == "Token":
-            # Convert final agent's messages to tokens for training
             final_agent_id = self.phases[-1].agent_ids[0]
             final_agent = self.agents[final_agent_id]
             
@@ -308,7 +294,7 @@ class MultiAgentExecutionEngine:
                 contains_generation_msg=True
             )
             
-            response_tokens = prompt_tokens  # The conversation becomes the response tokens
+            response_tokens = prompt_tokens 
             prompt_tokens = torch.tensor([], dtype=torch.long) 
             response_tokens = torch.tensor(response_tokens, dtype=torch.long)
             response_masks = torch.tensor(response_masks, dtype=torch.long)
@@ -335,8 +321,6 @@ class MultiAgentExecutionEngine:
             }
     
     def _inject_workflow_context(self, current_agent_id: str, phase_responses: Dict[str, str]):
-        """Inject context from previous phases into current agent"""
-        
         context_parts = []
         
         for conn in self.connections:
@@ -445,7 +429,6 @@ class MultiAgentExecutionEngine:
         return self._format_results_for_training(results)
     
     def _format_results_for_training(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Format workflow results for PPO training"""
         if not results:
             raise RuntimeError("Mutli-Agent execution produced no results")
         
