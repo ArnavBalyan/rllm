@@ -98,7 +98,11 @@ class AgentPPOTrainer(RayPPOTrainer):
         env_args = batch.non_tensor_batch["extra_info"].tolist()
 
         full_agent_args = dict(self.config.agent.get("agent_args", {})) | self.agent_args
-        base_env_args = dict(self.config.env.get("env_args", {})) | self.env_args
+        # Merge environment arguments from both "env_args" and (for backward compatibility) "base_env_args" if present.
+        base_env_args_cfg = dict(self.config.env.get("env_args", {}))
+        # Handle legacy configs that might specify "base_env_args"
+        base_env_args_cfg |= dict(self.config.env.get("base_env_args", {}))
+        base_env_args = base_env_args_cfg | self.env_args
 
         def _create_env(i):
             if isinstance(env_args[i], str):

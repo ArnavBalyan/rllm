@@ -37,7 +37,7 @@ You should only output the NEXT ACTION at each interation in the ``` ```. For ex
 You should plan ahead and need to achieve it in minimum number of steps.
 You should be aware that frozen tiles can be slippery, but the chance is small and you should not overthink it.
 
-Please show your thinking process and put the final action in ``` ```. In every turn, the final action MUST be one of Up, Down, Left, Right.
+Please reply with 1 word and put the final action in ``` ```. In every turn, the final action MUST be one of Up, Down, Left, Right.
 """
 
     MULTI_SHOT_SYSTEM_PROMPT: str = """You are Qwen, created by Alibaba Cloud. You are a helpful assistant. You are walking on a frozen lake.

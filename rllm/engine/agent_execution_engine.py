@@ -159,6 +159,27 @@ class AgentExecutionEngine:
     async def _get_verl_async(self, prompt, application_id, **kwargs):
         batch = self._convert_prompt_verl([prompt], **kwargs)
 
+        # ------------------------------------------------------------------
+        # Logging prefix fingerprint for cache-analysis purposes.
+        # We fingerprint the *token IDs* of the prompt being sent to vLLM so
+        # that identical prefixes across ranks/GPU workers have identical
+        # hashes independent of whitespace or formatting variations.
+        # ------------------------------------------------------------------
+        try:
+            from rllm.kv_logger import dump as _kv_dump
+            import hashlib, array
+
+            token_ids: list[int] = batch.batch["input_ids"].tolist()[0]  # bs == 1
+            kv_hash = hashlib.md5(array.array("I", token_ids).tobytes()).hexdigest()
+            # Note: we cannot know hit/miss at this point; leave hit=None.
+            _kv_dump(rank=self.router.addresses.index(self.router.addresses[0]),
+                     prefix_hash=kv_hash,
+                     hit=None,
+                     global_step=getattr(self, "_global_step", 0))
+        except Exception:
+            # Never fail training due to logging issues.
+            pass
+
         if "max_tokens" in kwargs:
             batch.meta_info["max_tokens"] = kwargs["max_tokens"]
 

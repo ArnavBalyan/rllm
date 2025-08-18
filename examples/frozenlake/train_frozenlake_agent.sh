@@ -1,5 +1,11 @@
 set -x
 
+# Enable Mooncake shared KV cache
+export LMCACHE_USE_EXPERIMENTAL=true
+export LMCACHE_LOG_LEVEL=INFO
+export LMCACHE_CONFIG_FILE=/workspace/mooncake-config.yaml
+export VLLM_KV_TRANSFER_CONFIG='{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
+
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:False"
 export VLLM_USE_V1=1
@@ -11,16 +17,16 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 python3 -m examples.frozenlake.train_frozenlake_agent \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=64 \
-    data.val_batch_size=128 \
+    data.train_batch_size=8 \
+    data.val_batch_size=8 \
     data.max_prompt_length=4096 \
     data.max_response_length=10240 \
-    actor_rollout_ref.model.path=Qwen/Qwen3-4B \
+    actor_rollout_ref.model.path=Qwen/Qwen2.5-1.5B \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
-    actor_rollout_ref.actor.ppo_mini_batch_size=32 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=8 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24000 \
     actor_rollout_ref.actor.use_kl_loss=False \
@@ -52,11 +58,11 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     algorithm.mask_truncated_samples=False \
     algorithm.clip_advantages=False \
     trainer.critic_warmup=0 \
-    trainer.logger=['console','wandb'] \
+    trainer.logger=['console'] \
     trainer.project_name='rllm-agent' \
     trainer.experiment_name='4b-frozenlake_agent' \
     trainer.val_before_train=False \
-    trainer.n_gpus_per_node=8 \
+    trainer.n_gpus_per_node=2 \
     trainer.nnodes=1 \
     trainer.save_freq=40 \
     trainer.test_freq=10 \
@@ -71,4 +77,7 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     +agent.engine_args.disable_thinking=False \
     +agent.agent_args.max_steps=10 \
     +agent.agent_args.use_accumulate_history=True \
-    trainer.total_epochs=1
+    trainer.total_epochs=1 \
+    +env.base_env_args.size=8 \
+    +env.base_env_args.seed=42 \
+    +env.base_env_args.p=0.8

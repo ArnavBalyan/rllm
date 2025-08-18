@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from copy import deepcopy
-
+import time
 import aiohttp
 import numpy as np
 import torch
@@ -157,14 +157,17 @@ class Router:
         batch_size = len(batch.non_tensor_batch["formatted_prompts"])
         batch_response_ids: list[list[int]] = [[] for _ in range(batch_size)]
 
-        for batch_index, formatted_prompt in enumerate(batch.non_tensor_batch["formatted_prompts"]):
-            # For Completion API, we need to convert the conversation to a prompt string
-            self.counter += 1
+        from rllm import perf_logger
+
+        rank_idx = self.addresses.index(address) if address in self.addresses else 0
+        start_time = time.time()
+
+        for formatted_prompt in batch.non_tensor_batch["formatted_prompts"]:
             tasks.append(
-                self.submit_completions(  # Changed from submit_chat_completions
+                self.submit_completions(
                     address=address,
                     model=self.model_name,
-                    prompt=formatted_prompt,  # Changed from messages
+                    prompt=formatted_prompt,
                     **kwargs,
                 )
             )
@@ -172,7 +175,17 @@ class Router:
         # Potential blocking: asyncio.gather can block if any task takes too long
         logger.debug("Sending total requests: %s", self.counter)
         completions_list = await asyncio.gather(*tasks)
-        await self.release_address(address, application_id)  # Release the address when done
+        end_time = time.time()
+
+        await self.release_address(address, application_id)
+
+        # Log batch timing (batch_size prompts)
+        perf_logger.log_batch(
+            rank=rank_idx,
+            step=self.counter,
+            batch_size=batch_size,
+            latency_ms=(end_time - start_time) * 1000,
+        )
 
         for batch_index, completions in enumerate(completions_list):
             comps = []
