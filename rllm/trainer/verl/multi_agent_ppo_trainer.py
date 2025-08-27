@@ -139,6 +139,9 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
     def generate_chain_of_experts_trajectories(self, timing_raw=None, meta_info=None):
         """Generate Chain of Experts trajectories by processing batch through phases"""
         
+        if timing_raw is None:
+            timing_raw = {}
+        
         with _timer("collect_chain_of_experts_trajectories", timing_raw):
             workflow_results = self.multi_agent_engine.execute_chain_of_experts_batch(
                 timing_raw=timing_raw,

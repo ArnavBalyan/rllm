@@ -277,7 +277,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                                 non_last_step_batch = batch.select_idxs(not_last_step_indices)
 
                                 # filter last_step_batch to make sure its multiple of world size
-                                num_trainer_replicas = self.actor_rollout_wg.world_size
+                                num_trainer_replicas = self._get_actor_rollout_world_size()
                                 max_batch_size = (
                                     last_step_batch.batch["input_ids"].shape[0]  # 1 per trajectory
                                     // num_trainer_replicas
@@ -301,7 +301,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                                 batch = self._pad_dataproto_to_world_size(batch)
                             else:
                                 # Round down to the nearest multiple of world size
-                                num_trainer_replicas = self.actor_rollout_wg.world_size
+                                num_trainer_replicas = self._get_actor_rollout_world_size()
                                 max_batch_size = (batch.batch["input_ids"].shape[0] // num_trainer_replicas) * num_trainer_replicas
                                 if not max_batch_size:
                                     # give up, you got everything either all wrong or right.
@@ -938,6 +938,15 @@ class AgentPPOTrainer(RayPPOTrainer):
         other_step_batch.batch["advantages"] = final_advantage
         other_step_batch.batch["returns"] = final_advantage
 
+    def _get_actor_rollout_world_size(self):
+        """Return actor rollout world size for both RayWorkerGroup and AsyncLLMServerManager."""
+        if hasattr(self.actor_rollout_wg, "world_size"):
+            return self.actor_rollout_wg.world_size
+        if hasattr(self.actor_rollout_wg, "worker_group") and hasattr(self.actor_rollout_wg.worker_group, "world_size"):
+            return self.actor_rollout_wg.worker_group.world_size
+        # default single worker
+        return 1
+
     def _pad_dataproto_to_world_size(self, batch):
         world_sizes = []
         if self.use_critic and self.critic_wg.world_size != 0:
@@ -947,8 +956,9 @@ class AgentPPOTrainer(RayPPOTrainer):
         if self.use_rm and self.rm_wg.world_size != 0:
             world_sizes.append(self.rm_wg.world_size)
         if self.hybrid_engine:
-            if self.actor_rollout_wg.world_size != 0:
-                world_sizes.append(self.actor_rollout_wg.world_size)
+            ar_ws = self._get_actor_rollout_world_size()
+            if ar_ws:
+                world_sizes.append(ar_ws)
         else:
             if self.actor_wg.world_size != 0:
                 world_sizes.append(self.actor_wg.world_size)

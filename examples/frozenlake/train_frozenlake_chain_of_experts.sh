@@ -4,6 +4,7 @@ set -x
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:False"
 export VLLM_USE_V1=1
+export NCCL_P2P_DISABLE=1
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
 
@@ -17,14 +18,14 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     data.max_response_length=2048 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
     data.val_files=${RLLM_DIR}/data/rllm-frozenlake/test.parquet \
-    actor_rollout_ref.model.path=Qwen/Qwen3-0.6B \
+    actor_rollout_ref.model.path=Qwen/Qwen2-0.5B \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
     actor_rollout_ref.actor.ppo_mini_batch_size=2 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=12000 \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=8192 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
@@ -50,11 +51,15 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.actor.entropy_coeff=0 \
+    +trainer.use_critic=false \
+    +trainer.use_reference_policy=false \
+    +actor_rollout_ref.rollout.log_prob_auto_truncate=true \
+    +actor_rollout_ref.ref.log_prob_auto_truncate=true \
     algorithm.kl_ctrl.kl_coef=0.001 \
     algorithm.mask_truncated_samples=False \
     algorithm.clip_advantages=False \
     trainer.critic_warmup=0 \
-    trainer.logger=['console'] \
+    trainer.logger=['console','wandb'] \
     trainer.project_name='rllm-chain-of-experts' \
     trainer.experiment_name='frozenlake-chain-of-experts-test' \
     trainer.val_before_train=False \
@@ -72,7 +77,7 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     agent.async_engine=True \
     agent.use_stepwise_advantage=False \
     +agent.engine_args.disable_thinking=False \
-    +agent.agent_args.max_steps=10 \
+    +agent.agent_args.max_steps=8 \
     +agent.agent_args.use_accumulate_history=True \
     trainer.total_epochs=1
 

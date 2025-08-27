@@ -47,6 +47,10 @@ async def poll_completions_openai(address: str, **completions_request) -> Comple
                         error_text = await response.text()
                         raise Exception(f"API request failed with status {response.status}: {error_text}")
                     result = await response.json()
+                    
+                    # Convert the raw JSON response to an OpenAI Completion object
+                    return result
+
                     # Convert the raw JSON response to an OpenAI Completion object
                     return result
         except Exception as e:
@@ -157,17 +161,36 @@ class Router:
         batch_size = len(batch.non_tensor_batch["formatted_prompts"])
         batch_response_ids: list[list[int]] = [[] for _ in range(batch_size)]
 
-        for batch_index, formatted_prompt in enumerate(batch.non_tensor_batch["formatted_prompts"]):
+        for batch_index, formatted_prompt in enumerate(batch.non_tensor_batch["formatted_prompts"]):            
             # For Completion API, we need to convert the conversation to a prompt string
             self.counter += 1
-            tasks.append(
-                self.submit_completions(  # Changed from submit_chat_completions
-                    address=address,
-                    model=self.model_name,
-                    prompt=formatted_prompt,  # Changed from messages
-                    **kwargs,
-                )
+            
+            formatted_prompt = batch.non_tensor_batch["formatted_prompts"][batch_index]
+            # Truncate prompt if it exceeds max_prompt_length
+            max_prompt_len = getattr(self.config.data, "max_prompt_length", None)
+            if max_prompt_len is not None:
+                prompt_tokens = self.tokenizer.encode(formatted_prompt)
+                if len(prompt_tokens) > max_prompt_len:
+                    original_len = len(prompt_tokens)
+                    prompt_tokens = prompt_tokens[-max_prompt_len:]
+                    formatted_prompt = self.tokenizer.decode(prompt_tokens)
+                    print(f"Truncated prompt from {original_len} to {len(prompt_tokens)} tokens")
+
+            # Log the request being sent to the model
+            print(f"\n{'='*80}")
+            print(f"REQUEST TO MODEL (batch {batch_index + 1}/{batch_size}):")
+            print(f"{'='*80}")
+            print(f"Prompt: {formatted_prompt}")
+            print(f"Sampling params: {kwargs}")
+            print(f"{'='*80}\n")
+            
+            task = self.submit_completions(  # Changed from submit_chat_completions
+                address=address,
+                model=self.model_name,
+                prompt=formatted_prompt,  # Changed from messages
+                **kwargs,
             )
+            tasks.append(task)
 
         # Potential blocking: asyncio.gather can block if any task takes too long
         logger.debug("Sending total requests: %s", self.counter)
@@ -175,6 +198,13 @@ class Router:
         await self.release_address(address, application_id)  # Release the address when done
 
         for batch_index, completions in enumerate(completions_list):
+            # Log the response from the model
+            print(f"\n{'='*80}")
+            print(f"RESPONSE FROM MODEL (batch {batch_index + 1}/{batch_size}):")
+            print(f"{'='*80}")
+            print(f"Raw response: {completions}")
+            print(f"{'='*80}\n")
+            
             comps = []
             for choice in completions.get("choices", []):
                 token_ids = choice.get("logprobs", {}).get("tokens", [])

@@ -376,6 +376,9 @@ class MultiAgentExecutionEngine:
         
         max_concurrency = len(self.envs)
         
+        # Wake up the rollout engine before starting trajectory generation
+        self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.wake_up()
+        
         async def launch_workflow_trajectory(env_idx: int):
             try:
                 application_id = str(uuid.uuid4())
@@ -399,6 +402,9 @@ class MultiAgentExecutionEngine:
                 yield result
             except Exception as e:
                 raise e
+        
+        # Sleep the rollout engine after all trajectories are completed
+        self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.sleep()
     
     def execute_chain_of_experts_batch(
         self, 
