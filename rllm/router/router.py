@@ -176,13 +176,13 @@ class Router:
                     formatted_prompt = self.tokenizer.decode(prompt_tokens)
                     print(f"Truncated prompt from {original_len} to {len(prompt_tokens)} tokens")
 
-            # Log the request being sent to the model
-            print(f"\n{'='*80}")
-            print(f"REQUEST TO MODEL (batch {batch_index + 1}/{batch_size}):")
-            print(f"{'='*80}")
-            print(f"Prompt: {formatted_prompt}")
-            print(f"Sampling params: {kwargs}")
-            print(f"{'='*80}\n")
+            # # Log the request being sent to the model
+            # print(f"\n{'='*80}")
+            # print(f"REQUEST TO MODEL (batch {batch_index + 1}/{batch_size}):")
+            # print(f"{'='*80}")
+            # print(f"Prompt: {formatted_prompt}")
+            # print(f"Sampling params: {kwargs}")
+            # print(f"{'='*80}\n")
             
             task = self.submit_completions(  # Changed from submit_chat_completions
                 address=address,
@@ -199,16 +199,18 @@ class Router:
 
         for batch_index, completions in enumerate(completions_list):
             # Log the response from the model
-            print(f"\n{'='*80}")
-            print(f"RESPONSE FROM MODEL (batch {batch_index + 1}/{batch_size}):")
-            print(f"{'='*80}")
-            print(f"Raw response: {completions}")
-            print(f"{'='*80}\n")
+            # print(f"\n{'='*80}")
+            # print(f"RESPONSE FROM MODEL (batch {batch_index + 1}/{batch_size}):")
+            # print(f"{'='*80}")
+            # print(f"Raw response: {completions}")
+            # print(f"{'='*80}\n")
             
             comps = []
             for choice in completions.get("choices", []):
-                token_ids = choice.get("logprobs", {}).get("tokens", [])
-                token_ids = [int(t.split(":")[1]) for t in token_ids]
+                # Get the actual generated text from the choice
+                generated_text = choice.get("text", "")
+                # Tokenize the generated text to get token IDs
+                token_ids = self.tokenizer.encode(generated_text, add_special_tokens=False)
                 comps.append(token_ids)
             batch_response_ids[batch_index] = comps
 

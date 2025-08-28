@@ -139,15 +139,11 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
     def generate_chain_of_experts_trajectories(self, timing_raw=None, meta_info=None):
         """Generate Chain of Experts trajectories by processing batch through phases"""
         
-        if timing_raw is None:
-            timing_raw = {}
-        
         with _timer("collect_chain_of_experts_trajectories", timing_raw):
             workflow_results = self.multi_agent_engine.execute_chain_of_experts_batch(
                 timing_raw=timing_raw,
                 meta_info=meta_info
             )
-        
         with _timer("transform_chain_of_experts_trajectories", timing_raw):
             final_gen_batch_output, metrics = self._transform_chain_of_experts_trajectories(workflow_results, meta_info)
         
@@ -354,6 +350,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     repeat_times=self.config.actor_rollout_ref.rollout.n,
                     interleave=True,
                 )
+                print("Batch dict starting update")
                 
                 metrics = {}
                 timing_raw = {}
@@ -364,9 +361,14 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     "workflow_type": self.workflow.workflow_id,
                     "temperature": self.config.actor_rollout_ref.rollout.temperature,
                 }
+                print("Batch dict 364")
                 
                 with _timer("chain_of_experts_batch", timing_raw):
+                    print("Batch dict 367")
+                    
                     self.init_envs_and_agents(batch)
+                    print("Batch dict 370")
+
                     # at this point the system ahs multiple boards, and coordinator agent assigned
                     # to each board with some basic metadata and initialized empty lists etc.
                     
@@ -374,7 +376,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         timing_raw=timing_raw, 
                         meta_info=batch.meta_info
                     )
-
+                    print("CHAIN OF EXPERTS COMPLETE FOR THE CURRENT STEP")
                     batch = batch.union(final_gen_batch_output)
                     metrics.update(generate_metrics)
                     
@@ -428,28 +430,33 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         batch = batch.union(ref_log_prob)
                 
                 batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
+                print("batch.meta_info generation complete")
                 
                 if self.use_critic:
                     with _timer("update_critic", timing_raw):
                         critic_output = self.critic_wg.update_critic(batch)
                     critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
                     metrics.update(critic_output_metrics)
+                print("critic update complete")
                 
                 if self.config.trainer.critic_warmup <= self.global_steps:
                     with _timer("update_actor", timing_raw):
                         actor_output = self.actor_rollout_wg.update_actor(batch)
                     actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                     metrics.update(actor_output_metrics)
+                print("actor update complete")
                 
                 if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
                     with _timer("testing", timing_raw):
+                        print("validation started")
                         val_metrics: dict = self._validate_multi_agent()
+                        print("validation complete")
                     metrics.update(val_metrics)
                 
                 if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
                     with _timer("save_checkpoint", timing_raw):
                         self._save_checkpoint()
-                
+                print("Checkpoint saved")
                 # Collect and log metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
@@ -459,6 +466,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 
                 if self.global_steps >= self.total_training_steps:
                     if self.val_reward_fn is not None:
+                        print("Validating the Mutli agent loop")
                         val_metrics = self._validate_multi_agent()
                         logger.log(data=val_metrics, step=self.global_steps)
                     return
@@ -470,12 +478,16 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         rewards_lst = []
         data_source_lst = []
         uid_lst = []
-        
+        cnt_brk = 0
         for test_data in self.val_dataloader:
+            cnt_brk += 1
+            if cnt_brk > 3:
+                break
             test_batch = DataProto.from_single_dict(test_data)
             test_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(test_batch.batch))], dtype=object)
             n_val_samples = self.config.actor_rollout_ref.rollout.val_kwargs.n
             test_batch = test_batch.repeat(repeat_times=n_val_samples, interleave=True)
+            print(f"[DEBUG VAL] n_val_samples={n_val_samples} | batch_size_after_repeat={len(test_batch.batch)}")
             test_batch.pop(["input_ids", "attention_mask", "position_ids"])
             
             test_batch.meta_info = {
@@ -492,6 +504,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             self.init_envs_and_agents(test_batch)
             
             test_output_gen_batch, _ = self.generate_chain_of_experts_trajectories(
+                timing_raw={},  # Add empty dict for timing_raw
                 meta_info=test_batch.meta_info
             )
             test_batch = test_batch.union(test_output_gen_batch)

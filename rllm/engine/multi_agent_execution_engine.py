@@ -140,7 +140,7 @@ class MultiAgentExecutionEngine:
     
     def __init__(self, workflow: BaseWorkflow, env_class, *, env_args=None,
                  engine_name="verl", tokenizer=None, rollout_engine=None,
-                 config=None, trajectory_timeout=None, max_workers=64, max_steps=10, **kwargs):
+                 config=None, trajectory_timeout=None, max_workers=64, max_steps=2, **kwargs):
         self.workflow = workflow
         self.agent_cfgs, self.phases, self.connections = workflow.define_workflow()
         self.max_steps = max_steps
@@ -215,6 +215,7 @@ class MultiAgentExecutionEngine:
         final_tokens = []
         final_masks = []
         chat_completions = []
+        completed_turns = 0
         
         for step_idx in range(self.max_steps):
             
@@ -243,6 +244,7 @@ class MultiAgentExecutionEngine:
                     max_tokens=engine.max_response_length,
                     **engine.sampling_params
                 )
+                
                 
                 action = agent.update_from_model(response)
                 phase_responses[agent_id] = response
@@ -278,7 +280,7 @@ class MultiAgentExecutionEngine:
                 
                 if done:
                     break
-        
+            completed_turns = completed_turns + 1
         
         if mode == "Token":
             final_agent_id = self.phases[-1].agent_ids[0]
@@ -309,7 +311,8 @@ class MultiAgentExecutionEngine:
                 "metrics": {
                     "workflow_steps": len(trajectory.steps),
                     "phases_executed": len(self.phases),
-                    "total_reward": total_reward
+                    "total_reward": total_reward,
+                    "completed_turns": completed_turns
                 }
             }
         else:
@@ -376,12 +379,24 @@ class MultiAgentExecutionEngine:
         
         max_concurrency = len(self.envs)
         
+        # Add logging to track environment count
+        print(f"\n{'='*60}")
+        print(f"DEBUG: trajectory_generator called")
+        print(f"  - Environment count: {len(self.envs)}")
+        print(f"  - Max concurrency: {max_concurrency}")
+        print(f"{'='*60}\n")
+        
         # Wake up the rollout engine before starting trajectory generation
         self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.wake_up()
-        
+                
         async def launch_workflow_trajectory(env_idx: int):
             try:
                 application_id = str(uuid.uuid4())
+                print(f"\n{'='*60}")
+                print(f"DEBUG: Starting workflow trajectory for env_idx={env_idx}")
+                print(f"  - Application ID: {application_id}")
+                print(f"{'='*60}\n")
+                
                 result = await self.run_workflow_trajectory_async(
                     env_idx=env_idx,
                     application_id=application_id,
@@ -389,6 +404,13 @@ class MultiAgentExecutionEngine:
                     mode=mode,
                     **kwargs
                 )
+                
+                print(f"\n{'='*60}")
+                print(f"DEBUG: Completed workflow trajectory for env_idx={env_idx}")
+                print(f"  - Application ID: {application_id}")
+                print(f"  - Timestamp: {time.time()}")
+                print(f"{'='*60}\n")
+                
                 return result
             except Exception as e:
                 traceback.print_exc()
@@ -396,16 +418,34 @@ class MultiAgentExecutionEngine:
         
         tasks = [launch_workflow_trajectory(i) for i in range(len(self.envs))]
         
+        print(f"\n{'='*60}")
+        print(f"DEBUG: Created {len(tasks)} trajectory tasks")
+        print(f"  - Tasks will run concurrently with asyncio.as_completed")
+        print(f"{'='*60}\n")
+        
+        completed_trajectories = []
         for task in asyncio.as_completed(tasks):
             try:
                 result = await task
+                completed_trajectories.append(result)
                 yield result
             except Exception as e:
                 raise e
         
+        # Visualize trajectory turns at the end using metrics from completed_trajectories
+        if completed_trajectories:
+            print(f"\n{'='*60}")
+            print("TRAJECTORY TURNS SUMMARY:")
+            print(f"{'='*60}")
+            for idx, traj in enumerate(completed_trajectories):
+                steps = traj.get("metrics", {}).get("workflow_steps", 0)
+                bar = "█" * steps
+                print(f"Traj {idx}: {bar} ({steps} turns)")
+            print(f"{'='*60}\n")
+        
         # Sleep the rollout engine after all trajectories are completed
         self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.sleep()
-    
+        
     def execute_chain_of_experts_batch(
         self, 
         timing_raw: Dict[str, Any] = None, 

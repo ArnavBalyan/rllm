@@ -1,0 +1,1388 @@
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+Starting FrozenLake Chain of Experts Training
+============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ANTLR runtime and generated code versions disagree: 4.7.2!=4.9.3
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m {'actor_rollout_ref': {'actor': {'checkpoint': {'contents': ['model',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                              'optimizer',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                              'extra']},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'clip_ratio': 0.2,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'clip_ratio_c': 3.0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'clip_ratio_high': 0.28,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'clip_ratio_low': 0.2,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'entropy_coeff': 0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'fsdp_config': {'fsdp_size': -1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                  'offload_policy': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                  'optimizer_offload': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                  'param_offload': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                  'reshard_after_forward': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                  'wrap_policy': {'min_num_params': 0}},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'grad_clip': 1.0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'grad_norm_threshold': 10,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'kl_loss_coef': 0.001,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'kl_loss_type': 'low_var_kl',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'loss_agg_mode': 'seq-mean-token-sum',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'optim': {'lr': 1e-06,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                            'lr_warmup_steps': -1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                            'lr_warmup_steps_ratio': 0.0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                            'min_lr_ratio': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                            'num_cycles': 0.5,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                            'total_training_steps': -1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                            'warmup_style': 'constant',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                            'weight_decay': 0.01},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'ppo_epochs': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'ppo_max_token_len_per_gpu': 8192,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'ppo_micro_batch_size': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'ppo_micro_batch_size_per_gpu': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'ppo_mini_batch_size': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'ppo_num_mini_batches': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'shuffle': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'strategy': 'fsdp',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'ulysses_sequence_parallel_size': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'use_dynamic_bsz': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'use_dynamic_mini_batch': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'use_kl_loss': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'use_torch_compile': True},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                        'hybrid_engine': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                        'model': {'enable_activation_offload': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'enable_gradient_checkpointing': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'external_lib': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'lora_alpha': 16,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'lora_rank': 0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'override_config': {},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'path': 'Qwen/Qwen2-0.5B',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'target_modules': 'all-linear',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'trust_remote_code': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'use_fused_kernels': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'use_liger': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'use_remove_padding': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                  'use_shm': False},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                        'ref': {'fsdp_config': {'param_offload': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                'reshard_after_forward': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                'wrap_policy': {'min_num_params': 0}},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                'log_prob_auto_truncate': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                'log_prob_max_token_len_per_gpu': 8192,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                'log_prob_micro_batch_size': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                'log_prob_micro_batch_size_per_gpu': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                'log_prob_use_dynamic_bsz': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                'strategy': 'fsdp',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                'ulysses_sequence_parallel_size': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                'use_torch_compile': True},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                        'rollout': {'chat_scheduler': 'verl.schedulers.completions_scheduler.CompletionsScheduler',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'chat_template': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'disable_log_stats': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'disable_logging': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'do_sample': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'dtype': 'bfloat16',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'enable_chunked_prefill': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'enforce_eager': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'engine_kwargs': {'sglang': {'attention_backend': None},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                      'vllm': {'swap_space': None}},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'free_cache_engine': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'gpu_memory_utilization': 0.85,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'ignore_eos': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'layered_summon': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'load_format': 'dummy_dtensor',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'log_prob_auto_truncate': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'log_prob_max_token_len_per_gpu': 8192,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'log_prob_micro_batch_size': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'log_prob_micro_batch_size_per_gpu': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'log_prob_use_dynamic_bsz': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'max_model_len': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'max_num_batched_tokens': 8192,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'max_num_seqs': 1024,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'mode': 'async',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'multi_turn': {'enable': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                   'format': 'chatml',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                   'max_turns': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                   'tool_config_path': None},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'n': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'name': 'vllm',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'prompt_length': 4096,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'response_length': 2048,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'temperature': 0.7,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'tensor_model_parallel_size': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'top_k': -1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'top_p': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'use_fire_sampling': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                    'val_kwargs': {'do_sample': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                   'n': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                   'temperature': 0.7,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                   'top_k': 20,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                                   'top_p': 0.8}}},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m  'agent': {'agent_args': {'max_steps': 5, 'use_accumulate_history': True},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m            'async_engine': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m            'engine_args': {'disable_thinking': False},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m            'max_steps': 5,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m            'name': 'miniwobagent',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m            'normalize_step_advantage': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m            'overlong_filter': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m            'stepwise_advantage_mode': 'broadcast',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m            'trajectory_timeout': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m            'use_stepwise_advantage': False},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m  'algorithm': {'adv_estimator': 'grpo',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'clip_advantages': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'gamma': 1.0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'kl_ctrl': {'horizon': 10000,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                            'kl_coef': 0.001,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                            'target_kl': 0.1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                            'type': 'fixed'},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'kl_penalty': 'kl',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'lam': 1.0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'mask_truncated_samples': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'norm_adv_by_std_in_grpo': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'pf_ppo': {'reweight_method': 'pow', 'weight_pow': 2.0},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'use_kl_in_reward': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                'use_pf_ppo': False},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m  'critic': {'checkpoint': {'contents': ['model', 'optimizer', 'extra']},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'cliprange_value': 0.5,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'forward_max_token_len_per_gpu': 32768,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'forward_micro_batch_size': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'forward_micro_batch_size_per_gpu': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'grad_clip': 1.0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'loss_agg_mode': 'seq-mean-token-sum',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'model': {'enable_activation_offload': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'enable_gradient_checkpointing': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'external_lib': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'fsdp_config': {'fsdp_size': -1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                       'offload_policy': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                       'optimizer_offload': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                       'param_offload': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                       'reshard_after_forward': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                       'wrap_policy': {'min_num_params': 0}},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'lora_alpha': 16,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'lora_rank': 0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'override_config': {},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'path': '~/models/deepseek-llm-7b-chat',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'target_modules': 'all-linear',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'tokenizer_path': 'Qwen/Qwen2-0.5B',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'trust_remote_code': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'use_remove_padding': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'use_shm': False},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'optim': {'lr': 1e-05,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'lr_warmup_steps_ratio': 0.0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'min_lr_ratio': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'total_training_steps': -1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'warmup_style': 'constant',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                       'weight_decay': 0.01},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'ppo_epochs': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'ppo_max_token_len_per_gpu': 32768,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'ppo_micro_batch_size': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'ppo_micro_batch_size_per_gpu': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'ppo_mini_batch_size': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'rollout_n': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'shuffle': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'strategy': 'fsdp',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'ulysses_sequence_parallel_size': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m             'use_dynamic_bsz': True},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m  'custom_reward_function': {'name': 'compute_score', 'path': None},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m  'data': {'custom_cls': {'name': None, 'path': None},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'filter_overlong_prompts': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'filter_overlong_prompts_workers': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'image_key': 'images',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'max_prompt_length': 4096,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'max_response_length': 2048,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'prompt_key': 'prompt',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'return_full_prompt': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'return_raw_chat': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'return_raw_input_ids': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'reward_fn_key': 'data_source',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'shuffle': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'tokenizer': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'train_batch_size': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'train_files': '/workspace/rllm/data/rllm-frozenlake/train.parquet',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'truncation': 'error',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'trust_remote_code': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'use_shm': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'val_batch_size': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'val_files': '/workspace/rllm/data/rllm-frozenlake/test.parquet',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m           'video_key': 'videos'},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m  'env': {'env_args': {'is_slippery': False, 'max_steps': 5, 'size': 4},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m          'name': 'custom'},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m  'ray_init': {'num_cpus': None},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m  'reward_model': {'enable': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'forward_max_token_len_per_gpu': 32768,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'launch_reward_fn_async': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'max_length': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'micro_batch_size': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'micro_batch_size_per_gpu': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'model': {'external_lib': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                             'fsdp_config': {'fsdp_size': -1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                             'param_offload': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                             'reshard_after_forward': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                                             'wrap_policy': {'min_num_params': 0}},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                             'input_tokenizer': 'Qwen/Qwen2-0.5B',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                             'path': '~/models/FsfairX-LLaMA3-RM-v0.1',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                             'trust_remote_code': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                             'use_fused_kernels': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                             'use_remove_padding': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                             'use_shm': False},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'reward_manager': 'naive',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'sandbox_fusion': {'max_concurrent': 64, 'url': None},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'strategy': 'fsdp',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'ulysses_sequence_parallel_size': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m                   'use_dynamic_bsz': True},
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m  'trainer': {'balance_batch': True,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'critic_warmup': 0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'default_hdfs_dir': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'default_local_dir': 'checkpoints/rllm-chain-of-experts/frozenlake-chain-of-experts-test',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'del_local_ckpt_after_load': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'experiment_name': 'frozenlake-chain-of-experts-test',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'log_val_generations': 0,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'logger': ['console', 'wandb'],
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'max_actor_ckpt_to_keep': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'max_critic_ckpt_to_keep': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'n_gpus_per_node': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'n_training_gpus_per_node': 4,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'nnodes': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'project_name': 'rllm-chain-of-experts',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'ray_wait_register_center_timeout': 300,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'rejection_sample': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'rejection_sample_multiplier': 2,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'resume_from_path': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'resume_mode': 'auto',
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'rollout_data_dir': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'save_freq': 5,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'test_freq': 2,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'total_epochs': 1,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'total_training_steps': None,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'use_critic': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'use_reference_policy': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'val_before_train': False,
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m              'validation_data_dir': None}}
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m WARNING: val_batch_size is deprecated. Validation datasets are sent to inference engines as a whole batch, which will schedule the memory themselves.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [validate_config] All configuration checks passed successfully!
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using dataset class: RLHFDataset
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m dataset len: 10000
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using dataset class: RLHFDataset
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m dataset len: 100
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Size of train dataloader: 10000, Size of val dataloader: 100
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Total training steps: 10000
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using trajectory-level advantage, max_prompt_length and max_response_length will be applied episode-wise
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - proposer (proposer): FrozenLakeProposerAgent
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - expert (specialist): FrozenLakeExpertAgent
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - judge (judge): FrozenLakeJudgeAgent
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m WARNING: val_batch_size is deprecated. Validation datasets are sent to inference engines as a whole batch, which will schedule the memory themselves.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [validate_config] All configuration checks passed successfully!
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using dataset class: RLHFDataset
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m dataset len: 10000
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using dataset class: RLHFDataset
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m dataset len: 100
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Size of train dataloader: 10000, Size of val dataloader: 100
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Total training steps: 10000
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using trajectory-level advantage, max_prompt_length and max_response_length will be applied episode-wise
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m colocated worker base class <class 'verl.single_controller.base.worker.Worker'>
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_compute_log_prob
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_compute_ref_log_prob
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_execute_func_rank_zero
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m bind role actor_rollout method execute_method to class <class 'verl.single_controller.ray.base.create_colocated_worker_cls.<locals>.WorkerDict'>
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_execute_with_func_generator
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding generate_async
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_generate_sequences
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_get_state_dict
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_init_model
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_load_checkpoint
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m bind role actor_rollout method offload to class <class 'verl.single_controller.ray.base.create_colocated_worker_cls.<locals>.WorkerDict'>
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m bind role actor_rollout method resume to class <class 'verl.single_controller.ray.base.create_colocated_worker_cls.<locals>.WorkerDict'>
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_save_checkpoint
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_update_actor
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_update_actor_micro_batch
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_update_actor_mini_batch
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Binding actor_rollout_update_rollout_actor_module
+[36m(WorkerDict pid=23880)[0m Model config after override: Qwen2Config {
+[36m(WorkerDict pid=23880)[0m   "architectures": [
+[36m(WorkerDict pid=23880)[0m     "Qwen2ForCausalLM"
+[36m(WorkerDict pid=23880)[0m   ],
+[36m(WorkerDict pid=23880)[0m   "attention_dropout": 0.0,
+[36m(WorkerDict pid=23880)[0m   "eos_token_id": 151643,
+[36m(WorkerDict pid=23880)[0m   "hidden_act": "silu",
+[36m(WorkerDict pid=23880)[0m   "hidden_size": 896,
+[36m(WorkerDict pid=23880)[0m   "initializer_range": 0.02,
+[36m(WorkerDict pid=23880)[0m   "intermediate_size": 4864,
+[36m(WorkerDict pid=23880)[0m   "layer_types": [
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention",
+[36m(WorkerDict pid=23880)[0m     "full_attention"
+[36m(WorkerDict pid=23880)[0m   ],
+[36m(WorkerDict pid=23880)[0m   "max_position_embeddings": 131072,
+[36m(WorkerDict pid=23880)[0m   "max_window_layers": 24,
+[36m(WorkerDict pid=23880)[0m   "model_type": "qwen2",
+[36m(WorkerDict pid=23880)[0m   "num_attention_heads": 14,
+[36m(WorkerDict pid=23880)[0m   "num_hidden_layers": 24,
+[36m(WorkerDict pid=23880)[0m   "num_key_value_heads": 2,
+[36m(WorkerDict pid=23880)[0m   "pad_token_id": 151643,
+[36m(WorkerDict pid=23880)[0m   "rms_norm_eps": 1e-06,
+[36m(WorkerDict pid=23880)[0m   "rope_scaling": null,
+[36m(WorkerDict pid=23880)[0m   "rope_theta": 1000000.0,
+[36m(WorkerDict pid=23880)[0m   "sliding_window": null,
+[36m(WorkerDict pid=23880)[0m   "tie_word_embeddings": true,
+[36m(WorkerDict pid=23880)[0m   "torch_dtype": "bfloat16",
+[36m(WorkerDict pid=23880)[0m   "transformers_version": "4.55.4",
+[36m(WorkerDict pid=23880)[0m   "use_cache": true,
+[36m(WorkerDict pid=23880)[0m   "use_sliding_window": false,
+[36m(WorkerDict pid=23880)[0m   "vocab_size": 151936
+[36m(WorkerDict pid=23880)[0m }
+[36m(WorkerDict pid=23880)[0m 
+[36m(WorkerDict pid=23880)[0m Monkey patch _flash_attention_forward in transformers.integrations.flash_attention
+[36m(WorkerDict pid=23880)[0m Qwen2ForCausalLM contains 494.03M parameters
+[36m(WorkerDict pid=23880)[0m wrap_policy: functools.partial(<function _or_policy at 0x782d6105fe20>, policies=[functools.partial(<function transformer_auto_wrap_policy at 0x782d6105fd00>, transformer_layer_cls={<class 'transformers.models.qwen2.modeling_qwen2.Qwen2DecoderLayer'>})])
+[36m(WorkerDict pid=23880)[0m NCCL version 2.26.2+cuda12.2
+[36m(WorkerDict pid=23880)[0m Total steps: 10000, num_warmup_steps: 0
+[36m(WorkerDict pid=23880)[0m Actor use_remove_padding=True
+[36m(WorkerDict pid=23880)[0m Actor use_fused_kernels=False
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:15 [__init__.py:241] Automatically detected platform cuda.
+[36m(WorkerDict pid=23880)[0m Not patching vllm sleep/wake_up for version 0.10.1.1, VLLM_USE_V1=1
+[36m(pid=25144)[0m INFO 08-27 22:41:22 [__init__.py:241] Automatically detected platform cuda.[32m [repeated 2x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Not patching vllm sleep/wake_up for version 0.10.1.1, VLLM_USE_V1=1
+[36m(pid=25144)[0m Not patching vllm sleep/wake_up for version 0.10.1.1, VLLM_USE_V1=1
+[36m(AsyncvLLMServer pid=25144)[0m FastAPI startup
+[36m(AsyncvLLMServer pid=25144)[0m override_generation_config: {'n': 1, 'logprobs': 0, 'max_tokens': 2048, 'temperature': 0.7, 'top_k': -1, 'top_p': 1, 'ignore_eos': False}
+[36m(AsyncvLLMServer pid=25144)[0m INFO 08-27 22:41:28 [__init__.py:711] Resolved architecture: Qwen2ForCausalLM
+[36m(AsyncvLLMServer pid=25144)[0m INFO 08-27 22:41:28 [__init__.py:1750] Using max model len 32768
+[36m(AsyncvLLMServer pid=25144)[0m WARNING 08-27 22:41:28 [arg_utils.py:1775] Detected VLLM_USE_V1=1 with Engine in background thread. Usage should be considered experimental. Please report any issues on Github.
+[36m(AsyncvLLMServer pid=25144)[0m INFO 08-27 22:41:29 [arg_utils.py:1133] Using ray runtime env: {'env_vars': {'NCCL_DEBUG': 'WARN', 'TOKENIZERS_PARALLELISM': 'true'}}
+[36m(AsyncvLLMServer pid=25144)[0m INFO 08-27 22:41:29 [scheduler.py:222] Chunked prefill is enabled with max_num_batched_tokens=32768.
+[36m(AsyncvLLMServer pid=25144)[0m WARNING 08-27 22:41:30 [__init__.py:2921] We must use the `spawn` multiprocessing start method. Overriding VLLM_WORKER_MULTIPROC_METHOD to 'spawn'. See https://docs.vllm.ai/en/latest/usage/troubleshooting.html#python-multiprocessing for more information. Reasons: In a Ray actor and can only be spawned
+[36m(AsyncvLLMServer pid=25144)[0m INFO 08-27 22:41:34 [__init__.py:241] Automatically detected platform cuda.
+[36m(AsyncvLLMServer pid=25144)[0m Not patching vllm sleep/wake_up for version 0.10.1.1, VLLM_USE_V1=1
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:41:35 [core.py:636] Waiting for init message from front-end.
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:41:35 [core.py:74] Initializing a V1 LLM engine (v0.10.1.1) with config: model='Qwen/Qwen2-0.5B', speculative_config=None, tokenizer='Qwen/Qwen2-0.5B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config={}, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=32768, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, disable_custom_all_reduce=True, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, decoding_config=DecodingConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_backend=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=Qwen/Qwen2-0.5B, enable_prefix_caching=True, chunked_prefill_enabled=True, use_async_output_proc=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":1,"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[512,504,496,488,480,472,464,456,448,440,432,424,416,408,400,392,384,376,368,360,352,344,336,328,320,312,304,296,288,280,272,264,256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"pass_config":{},"max_capture_size":512,"local_cache_dir":null}
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: init_worker
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m instance_id: d13af319-c1be-4120-85cf-6084cf976eb0:BuULul:1:0 intializes with external actors: ['BuULulWorkerDict_0:0']
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: init_device
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:36 [parallel_state.py:1134] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+[36m(WorkerDict pid=23880)[0m WARNING 08-27 22:41:36 [topk_topp_sampler.py:61] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: load_model
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:36 [gpu_model_runner.py:1953] Starting to load model Qwen/Qwen2-0.5B...
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:36 [gpu_model_runner.py:1985] Loading model from scratch...
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:36 [cuda.py:288] Using Flash Attention backend on V1 engine.
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:36 [weight_utils.py:296] Using model weights format ['*.safetensors']
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:36 [weight_utils.py:349] No model.safetensors.index.json found in remote.
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:37 [default_loader.py:262] Loading weights took 0.14 seconds
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:37 [gpu_model_runner.py:2007] Model loading took 0.9277 GiB and 0.764661 seconds
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: get_kv_cache_spec
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: determine_available_memory
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m instance_id: d13af319-c1be-4120-85cf-6084cf976eb0:BuULul:1:0 intializes finished.
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:41 [backends.py:548] Using cache directory: /root/.cache/vllm/torch_compile_cache/2f375934f1/rank_0_0/backbone for vLLM's torch.compile
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:41 [backends.py:559] Dynamo bytecode transform time: 3.52 s
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:44 [backends.py:161] Directly load the compiled graph(s) for dynamic shape from the cache, took 2.654 s
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:44 [monitor.py:34] torch.compile takes 3.52 s in total
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:45 [gpu_worker.py:276] Available KV cache memory: 35.37 GiB
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: initialize_from_config
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: compile_or_warm_up_model
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:41:45 [kv_cache_utils.py:849] GPU KV cache size: 3,090,864 tokens
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:41:45 [kv_cache_utils.py:853] Maximum concurrency for 32,768 tokens per request: 94.33x
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:41:47 [gpu_model_runner.py:2708] Graph capturing finished in 1 secs, took 0.38 GiB
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: initialize_cache
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:41:47 [core.py:214] init engine (profile, create kv cache, warmup model) took 9.70 seconds
+[36m(AsyncvLLMServer pid=25144)[0m INFO 08-27 22:41:48 [loggers.py:142] Engine 000: vllm cache_config_info with initialization after num_gpu_blocks is: 193179
+[36m(AsyncvLLMServer pid=25144)[0m chat_template_str: None
+[36m(AsyncvLLMServer pid=25144)[0m WARNING 08-27 22:41:48 [__init__.py:1625] Default sampling parameters have been overridden by the model's Hugging Face generation config recommended from the model creator. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+[36m(AsyncvLLMServer pid=25144)[0m INFO 08-27 22:41:48 [serving_chat.py:134] Using default chat sampling params from model: {'temperature': 0.7, 'top_k': -1, 'top_p': 1, 'max_tokens': 2048}
+[36m(AsyncvLLMServer pid=25144)[0m INFO 08-27 22:41:48 [serving_completion.py:77] Using default completion sampling params from model: {'temperature': 0.7, 'top_k': -1, 'top_p': 1, 'max_tokens': 2048}
+[36m(AsyncvLLMServer pid=25144)[0m Async vLLM Server running at 172.17.0.5:37355
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m model_name: qwen/qwen2-0.5b, tokenizer_cls: qwen2tokenizerfast
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using QwenChatTemplateParser for Qwen/Qwen2-0.5B
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m model_name: qwen/qwen2-0.5b, tokenizer_cls: qwen2tokenizerfast
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using QwenChatTemplateParser for Qwen/Qwen2-0.5B
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m model_name: qwen/qwen2-0.5b, tokenizer_cls: qwen2tokenizerfast
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using QwenChatTemplateParser for Qwen/Qwen2-0.5B
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m model_name: qwen/qwen2-0.5b, tokenizer_cls: qwen2tokenizerfast
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using QwenChatTemplateParser for Qwen/Qwen2-0.5B
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Using LocalLogger is deprecated. The constructor API will change 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m No checkpoint directories found in /workspace/rllm/checkpoints/rllm-chain-of-experts/frozenlake-chain-of-experts-test
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Training from scratch
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Time taken to validate Chain of Experts system: 2.1696090698242188e-05
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict starting update
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 364
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 367
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 370
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: trajectory_generator called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Max concurrency: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Created 1 trajectory tasks
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Tasks will run concurrently with asyncio.as_completed
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Starting workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: f69bccab-0077-4bab-84d6-da82d1d5b09a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m WARNING 08-27 22:41:51 [executor_base.py:193] Executor is not sleeping.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset proposer[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset expert[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset judge[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: f69bccab-0077-4bab-84d6-da82d1d5b09a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334511.6077979
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: f69bccab-0077-4bab-84d6-da82d1d5b09a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334513.819636
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: f69bccab-0077-4bab-84d6-da82d1d5b09a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334517.9462144
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: f69bccab-0077-4bab-84d6-da82d1d5b09a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334520.6030934
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: f69bccab-0077-4bab-84d6-da82d1d5b09a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334524.0929887
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: f69bccab-0077-4bab-84d6-da82d1d5b09a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334526.165032
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Completed workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: f69bccab-0077-4bab-84d6-da82d1d5b09a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334528.532843
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m TRAJECTORY TURNS SUMMARY:
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Traj 0: ██ (2 turns)
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:42:08 [block_pool.py:280] Successfully reset prefix cache
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:42:08 [block_pool.py:280] Successfully reset prefix cache
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: sleep
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m CHAIN OF EXPERTS COMPLETE FOR THE CURRENT STEP
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:42:10 [gpu_worker.py:115] Sleep mode freed 37.75 GiB memory, 3.28 GiB memory is still in use.
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:42:10 [executor_base.py:188] It took 1.448852 seconds to fall asleep.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m batch.meta_info generation complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m critic update complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m actor update complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Checkpoint saved
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m step:1 - chain_of_experts/agent_count:0.000 - global_seqlen/min:1756.000 - global_seqlen/max:1756.000 - global_seqlen/minmax_diff:0.000 - global_seqlen/balanced_min:1756.000 - global_seqlen/balanced_max:1756.000 - global_seqlen/mean:1756.000 - actor/entropy_token_mean_loss:0.112 - actor/entropy_loss:0.112 - actor/pg_loss:0.000 - actor/pg_clipfrac:0.000 - actor/ppo_kl:0.000 - actor/pg_clipfrac_lower:0.000 - actor/grad_norm:0.000 - perf/mfu/actor:0.061 - perf/max_memory_allocated_gb:46.111 - perf/max_memory_reserved_gb:47.521 - perf/cpu_memory_used_gb:56.686 - actor/lr:0.000 - critic/score/mean:0.000 - critic/score/max:0.000 - critic/score/min:0.000 - critic/rewards/mean:0.000 - critic/rewards/max:0.000 - critic/rewards/min:0.000 - critic/advantages/mean:0.000 - critic/advantages/max:0.000 - critic/advantages/min:0.000 - critic/returns/mean:0.000 - critic/returns/max:0.000 - critic/returns/min:0.000 - response_length/mean:1756.000 - response_length/max:1756.000 - response_length/min:1756.000 - response_length/clip_ratio:0.000 - prompt_length/mean:0.000 - prompt_length/max:0.000 - prompt_length/min:0.000 - prompt_length/clip_ratio:0.000 - timing_s/collect_chain_of_experts_trajectories:18.454 - timing_s/transform_chain_of_experts_trajectories:0.002 - timing_s/adv:0.001 - timing_s/chain_of_experts_batch:18.459 - timing_s/old_log_prob:0.715 - timing_s/update_actor:3.543 - timing_per_token_ms/update_actor:2.017 - timing_per_token_ms/adv:0.000
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict starting update
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 364
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 367
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 370
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: trajectory_generator called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Max concurrency: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: wake_up
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Created 1 trajectory tasks
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Tasks will run concurrently with asyncio.as_completed
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Starting workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 51c37983-7df4-4c10-b57f-b2eeb90e375d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset proposer[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset expert[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset judge[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 51c37983-7df4-4c10-b57f-b2eeb90e375d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334534.7113607
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:42:14 [executor_base.py:204] It took 0.375551 seconds to wake up tags {'kv_cache', 'weights'}.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 51c37983-7df4-4c10-b57f-b2eeb90e375d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334536.0011628
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 51c37983-7df4-4c10-b57f-b2eeb90e375d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334546.5393858
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 51c37983-7df4-4c10-b57f-b2eeb90e375d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334547.835069
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 51c37983-7df4-4c10-b57f-b2eeb90e375d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334558.773491
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 51c37983-7df4-4c10-b57f-b2eeb90e375d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334560.2911859
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Completed workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 51c37983-7df4-4c10-b57f-b2eeb90e375d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334562.2386012
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m TRAJECTORY TURNS SUMMARY:
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Traj 0: ██ (2 turns)
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: sleep
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:42:42 [block_pool.py:280] Successfully reset prefix cache
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:42:42 [block_pool.py:280] Successfully reset prefix cache
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m CHAIN OF EXPERTS COMPLETE FOR THE CURRENT STEP
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:42:42 [gpu_worker.py:115] Sleep mode freed 36.50 GiB memory, 3.32 GiB memory is still in use.
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:42:42 [executor_base.py:188] It took 0.544442 seconds to fall asleep.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m batch.meta_info generation complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m critic update complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m actor update complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m validation started
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [DEBUG VAL] n_val_samples=1 | batch_size_after_repeat=1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: trajectory_generator called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Max concurrency: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: wake_up
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Created 1 trajectory tasks
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Tasks will run concurrently with asyncio.as_completed
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Starting workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e37ebb4f-de12-493d-8aec-c476fa411617
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset proposer[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset expert[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset judge[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e37ebb4f-de12-493d-8aec-c476fa411617
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334564.4412422
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:42:44 [executor_base.py:204] It took 0.375506 seconds to wake up tags {'kv_cache', 'weights'}.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e37ebb4f-de12-493d-8aec-c476fa411617
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334570.108222
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e37ebb4f-de12-493d-8aec-c476fa411617
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334572.667149
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e37ebb4f-de12-493d-8aec-c476fa411617
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334575.0215857
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e37ebb4f-de12-493d-8aec-c476fa411617
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334577.918836
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e37ebb4f-de12-493d-8aec-c476fa411617
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334580.8908684
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Completed workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e37ebb4f-de12-493d-8aec-c476fa411617
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334584.2139843
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m TRAJECTORY TURNS SUMMARY:
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Traj 0: ██ (2 turns)
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: sleep
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:43:04 [block_pool.py:280] Successfully reset prefix cache
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:43:04 [block_pool.py:280] Successfully reset prefix cache
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:43:04 [gpu_worker.py:115] Sleep mode freed 36.41 GiB memory, 3.32 GiB memory is still in use.
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:43:04 [executor_base.py:188] It took 0.466220 seconds to fall asleep.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [DEBUG VAL] n_val_samples=1 | batch_size_after_repeat=1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: trajectory_generator called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Max concurrency: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: wake_up
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Created 1 trajectory tasks
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Tasks will run concurrently with asyncio.as_completed
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Starting workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e12c7d80-6615-4494-8360-c46eee22c180
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset proposer[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset expert[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset judge[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e12c7d80-6615-4494-8360-c46eee22c180
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334585.248322
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:43:05 [executor_base.py:204] It took 0.452879 seconds to wake up tags {'kv_cache', 'weights'}.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e12c7d80-6615-4494-8360-c46eee22c180
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334588.8396275
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e12c7d80-6615-4494-8360-c46eee22c180
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334599.469447
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e12c7d80-6615-4494-8360-c46eee22c180
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334610.6879668
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e12c7d80-6615-4494-8360-c46eee22c180
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334612.1168678
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e12c7d80-6615-4494-8360-c46eee22c180
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334622.9019654
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Truncated prompt from 4572 to 4096 tokens
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Completed workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: e12c7d80-6615-4494-8360-c46eee22c180
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334633.7034953
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m TRAJECTORY TURNS SUMMARY:
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Traj 0: ██ (2 turns)
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: sleep
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:43:53 [block_pool.py:280] Successfully reset prefix cache
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:43:53 [block_pool.py:280] Successfully reset prefix cache
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [DEBUG VAL] n_val_samples=1 | batch_size_after_repeat=1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: trajectory_generator called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Max concurrency: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:43:54 [gpu_worker.py:115] Sleep mode freed 36.60 GiB memory, 3.32 GiB memory is still in use.
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: wake_up
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:43:54 [executor_base.py:188] It took 0.473101 seconds to fall asleep.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Created 1 trajectory tasks
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Tasks will run concurrently with asyncio.as_completed
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Starting workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: d1272d0f-6332-40c0-98c1-36b6d502126a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset proposer[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset expert[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset judge[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: d1272d0f-6332-40c0-98c1-36b6d502126a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334634.7298052
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:43:54 [executor_base.py:204] It took 0.454065 seconds to wake up tags {'kv_cache', 'weights'}.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: d1272d0f-6332-40c0-98c1-36b6d502126a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334645.1108527
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: d1272d0f-6332-40c0-98c1-36b6d502126a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334655.5063503
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: d1272d0f-6332-40c0-98c1-36b6d502126a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334665.6238399
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: d1272d0f-6332-40c0-98c1-36b6d502126a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334667.685155
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: d1272d0f-6332-40c0-98c1-36b6d502126a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334678.2276418
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Truncated prompt from 4572 to 4096 tokens
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Completed workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: d1272d0f-6332-40c0-98c1-36b6d502126a
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334689.0865552
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m TRAJECTORY TURNS SUMMARY:
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Traj 0: ██ (2 turns)
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:44:49 [block_pool.py:280] Successfully reset prefix cache
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: sleep
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:44:49 [block_pool.py:280] Successfully reset prefix cache
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m validation complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Checkpoint saved
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m step:2 - chain_of_experts/agent_count:0.000 - global_seqlen/min:1299.000 - global_seqlen/max:1299.000 - global_seqlen/minmax_diff:0.000 - global_seqlen/balanced_min:1299.000 - global_seqlen/balanced_max:1299.000 - global_seqlen/mean:1299.000 - actor/entropy_token_mean_loss:0.127 - actor/entropy_loss:0.127 - actor/pg_loss:0.000 - actor/pg_clipfrac:0.000 - actor/ppo_kl:0.000 - actor/pg_clipfrac_lower:0.000 - actor/grad_norm:0.000 - perf/mfu/actor:0.087 - perf/max_memory_allocated_gb:46.111 - perf/max_memory_reserved_gb:47.521 - perf/cpu_memory_used_gb:56.327 - actor/lr:0.000 - chain_of_experts/val_reward_mean:0.000 - chain_of_experts/val_reward_max:0.000 - chain_of_experts/val_reward_min:0.000 - chain_of_experts/val_reward_std:0.000 - critic/score/mean:0.000 - critic/score/max:0.000 - critic/score/min:0.000 - critic/rewards/mean:0.000 - critic/rewards/max:0.000 - critic/rewards/min:0.000 - critic/advantages/mean:0.000 - critic/advantages/max:0.000 - critic/advantages/min:0.000 - critic/returns/mean:0.000 - critic/returns/max:0.000 - critic/returns/min:0.000 - response_length/mean:1299.000 - response_length/max:1299.000 - response_length/min:1299.000 - response_length/clip_ratio:0.000 - prompt_length/mean:0.000 - prompt_length/max:0.000 - prompt_length/min:0.000 - prompt_length/clip_ratio:0.000 - timing_s/collect_chain_of_experts_trajectories:28.525 - timing_s/transform_chain_of_experts_trajectories:0.001 - timing_s/adv:0.001 - timing_s/chain_of_experts_batch:28.528 - timing_s/old_log_prob:0.340 - timing_s/update_actor:0.638 - timing_s/testing:125.798 - timing_per_token_ms/update_actor:0.491 - timing_per_token_ms/adv:0.000
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict starting update
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 364
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 367
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 370
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: trajectory_generator called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Max concurrency: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:44:49 [gpu_worker.py:115] Sleep mode freed 36.62 GiB memory, 3.32 GiB memory is still in use.
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: wake_up
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:44:49 [executor_base.py:188] It took 0.462260 seconds to fall asleep.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Created 1 trajectory tasks
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Tasks will run concurrently with asyncio.as_completed
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Starting workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 324f2f3f-db94-47bf-9a91-70482465695e
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset proposer[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset expert[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset judge[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 324f2f3f-db94-47bf-9a91-70482465695e
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334690.103154
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:44:50 [executor_base.py:204] It took 0.453194 seconds to wake up tags {'kv_cache', 'weights'}.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 324f2f3f-db94-47bf-9a91-70482465695e
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334700.4352417
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 324f2f3f-db94-47bf-9a91-70482465695e
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334710.6132283
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 324f2f3f-db94-47bf-9a91-70482465695e
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334721.322616
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 324f2f3f-db94-47bf-9a91-70482465695e
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334723.8295937
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 324f2f3f-db94-47bf-9a91-70482465695e
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334734.5329287
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Truncated prompt from 4572 to 4096 tokens
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Completed workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 324f2f3f-db94-47bf-9a91-70482465695e
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334746.0326915
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m TRAJECTORY TURNS SUMMARY:
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Traj 0: ██ (2 turns)
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: sleep
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:45:46 [block_pool.py:280] Successfully reset prefix cache
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:45:46 [block_pool.py:280] Successfully reset prefix cache
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m CHAIN OF EXPERTS COMPLETE FOR THE CURRENT STEP
+[36m(WorkerDict pid=23880)[0m INFO 08-27 22:45:46 [gpu_worker.py:115] Sleep mode freed 36.62 GiB memory, 3.32 GiB memory is still in use.
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:45:46 [executor_base.py:188] It took 0.467783 seconds to fall asleep.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m batch.meta_info generation complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m critic update complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m actor update complete
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Checkpoint saved
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m step:3 - chain_of_experts/agent_count:0.000 - global_seqlen/min:6616.000 - global_seqlen/max:6616.000 - global_seqlen/minmax_diff:0.000 - global_seqlen/balanced_min:6616.000 - global_seqlen/balanced_max:6616.000 - global_seqlen/mean:6616.000 - actor/entropy_token_mean_loss:0.004 - actor/entropy_loss:0.004 - actor/pg_loss:0.000 - actor/pg_clipfrac:0.000 - actor/ppo_kl:0.000 - actor/pg_clipfrac_lower:0.000 - actor/grad_norm:0.000 - perf/mfu/actor:0.365 - perf/max_memory_allocated_gb:51.610 - perf/max_memory_reserved_gb:55.025 - perf/cpu_memory_used_gb:56.593 - actor/lr:0.000 - critic/score/mean:0.000 - critic/score/max:0.000 - critic/score/min:0.000 - critic/rewards/mean:0.000 - critic/rewards/max:0.000 - critic/rewards/min:0.000 - critic/advantages/mean:0.000 - critic/advantages/max:0.000 - critic/advantages/min:0.000 - critic/returns/mean:0.000 - critic/returns/max:0.000 - critic/returns/min:0.000 - response_length/mean:6616.000 - response_length/max:6616.000 - response_length/min:6616.000 - response_length/clip_ratio:1.000 - prompt_length/mean:0.000 - prompt_length/max:0.000 - prompt_length/min:0.000 - prompt_length/clip_ratio:0.000 - timing_s/collect_chain_of_experts_trajectories:56.944 - timing_s/transform_chain_of_experts_trajectories:0.001 - timing_s/adv:0.000 - timing_s/chain_of_experts_batch:56.946 - timing_s/old_log_prob:0.393 - timing_s/update_actor:0.904 - timing_per_token_ms/update_actor:0.137 - timing_per_token_ms/adv:0.000
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict starting update
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 364
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 367
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Batch dict 370
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: trajectory_generator called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Max concurrency: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(WorkerDict pid=23880)[0m [DP=0,TP=0] execute_method: wake_up
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Created 1 trajectory tasks
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Tasks will run concurrently with asyncio.as_completed
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: Starting workflow trajectory for env_idx=0
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 4c97d0ab-6d26-42b7-a483-f784b641314d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset proposer[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset expert[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m [33m🔄 Reset judge[0m
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 4c97d0ab-6d26-42b7-a483-f784b641314d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334748.4126844
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(AsyncvLLMServer pid=25144)[0m [1;36m(EngineCore_0 pid=25257)[0;0m INFO 08-27 22:45:48 [executor_base.py:204] It took 0.507486 seconds to wake up tags {'kv_cache', 'weights'}.
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 4c97d0ab-6d26-42b7-a483-f784b641314d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334759.420734
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 4c97d0ab-6d26-42b7-a483-f784b641314d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334770.1919386
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 4c97d0ab-6d26-42b7-a483-f784b641314d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334780.600196
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m DEBUG: _get_verl_async called
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Batch size: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Environment count: 1
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Application ID: 4c97d0ab-6d26-42b7-a483-f784b641314d
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m   - Timestamp: 1756334791.2372956
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m ============================================================
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m 
+[36m(train_frozenlake_chain_of_experts pid=23511)[0m Truncated prompt from 4559 to 4096 tokens

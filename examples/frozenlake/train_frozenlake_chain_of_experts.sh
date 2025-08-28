@@ -23,7 +23,7 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
-    actor_rollout_ref.actor.ppo_mini_batch_size=2 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=1 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=8192 \
     actor_rollout_ref.actor.use_kl_loss=False \
@@ -63,21 +63,21 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     trainer.project_name='rllm-chain-of-experts' \
     trainer.experiment_name='frozenlake-chain-of-experts-test' \
     trainer.val_before_train=False \
-    trainer.n_gpus_per_node=2 \
+    trainer.n_gpus_per_node=1 \
     trainer.nnodes=1 \
     trainer.save_freq=5 \
     trainer.test_freq=2 \
     trainer.default_hdfs_dir=null \
-    trainer.rejection_sample=True \
+    trainer.rejection_sample=False \
     trainer.rejection_sample_multiplier=2 \
-    +env.env_args.max_steps=8 \
+    +env.env_args.max_steps=5 \
     +env.env_args.is_slippery=False \
     +env.env_args.size=4 \
-    agent.max_steps=4 \
+    agent.max_steps=5 \
     agent.async_engine=True \
     agent.use_stepwise_advantage=False \
     +agent.engine_args.disable_thinking=False \
-    +agent.agent_args.max_steps=8 \
+    +agent.agent_args.max_steps=5 \
     +agent.agent_args.use_accumulate_history=True \
     trainer.total_epochs=1
 

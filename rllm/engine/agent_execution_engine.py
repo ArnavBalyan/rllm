@@ -157,6 +157,16 @@ class AgentExecutionEngine:
         self.n_parallel_agents = len(envs)
 
     async def _get_verl_async(self, prompt, application_id, **kwargs):
+        
+        # Debug log for VeRL call
+        print(f"\n{'='*60}")
+        print(f"DEBUG: _get_verl_async called")
+        print(f"  - Batch size: {len(self.envs) if hasattr(self, 'envs') else 'N/A'}")
+        print(f"  - Environment count: {self.n_parallel_agents}")
+        print(f"  - Application ID: {application_id}")
+        print(f"  - Timestamp: {time.time()}")
+        print(f"{'='*60}\n")
+        
         batch = self._convert_prompt_verl([prompt], **kwargs)
 
         if "max_tokens" in kwargs:
