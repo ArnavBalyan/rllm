@@ -140,7 +140,7 @@ class MultiAgentExecutionEngine:
     
     def __init__(self, workflow: BaseWorkflow, env_class, *, env_args=None,
                  engine_name="verl", tokenizer=None, rollout_engine=None,
-                 config=None, trajectory_timeout=None, max_workers=64, max_steps=2, **kwargs):
+                 config=None, trajectory_timeout=None, max_workers=64, max_steps=10, **kwargs):
         self.workflow = workflow
         self.agent_cfgs, self.phases, self.connections = workflow.define_workflow()
         self.max_steps = max_steps

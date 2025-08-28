@@ -478,11 +478,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         rewards_lst = []
         data_source_lst = []
         uid_lst = []
-        cnt_brk = 0
         for test_data in self.val_dataloader:
-            cnt_brk += 1
-            if cnt_brk > 3:
-                break
             test_batch = DataProto.from_single_dict(test_data)
             test_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(test_batch.batch))], dtype=object)
             n_val_samples = self.config.actor_rollout_ref.rollout.val_kwargs.n

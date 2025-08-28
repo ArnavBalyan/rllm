@@ -12,13 +12,13 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=1 \
-    data.val_batch_size=1 \
+    data.train_batch_size=4 \
+    data.val_batch_size=4 \
     data.max_prompt_length=4096 \
     data.max_response_length=2048 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
     data.val_files=${RLLM_DIR}/data/rllm-frozenlake/test.parquet \
-    actor_rollout_ref.model.path=Qwen/Qwen2-0.5B \
+    actor_rollout_ref.model.path=Qwen/Qwen3-0.6B \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -61,23 +61,23 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='rllm-chain-of-experts' \
-    trainer.experiment_name='frozenlake-chain-of-experts-test' \
+    trainer.experiment_name='frozenlake-chain-of-experts-production' \
     trainer.val_before_train=False \
     trainer.n_gpus_per_node=1 \
     trainer.nnodes=1 \
-    trainer.save_freq=5 \
+    trainer.save_freq=10 \
     trainer.test_freq=2 \
     trainer.default_hdfs_dir=null \
     trainer.rejection_sample=False \
     trainer.rejection_sample_multiplier=2 \
-    +env.env_args.max_steps=5 \
+    +env.env_args.max_steps=10 \
     +env.env_args.is_slippery=False \
     +env.env_args.size=4 \
-    agent.max_steps=5 \
+    agent.max_steps=10 \
     agent.async_engine=True \
     agent.use_stepwise_advantage=False \
     +agent.engine_args.disable_thinking=False \
-    +agent.agent_args.max_steps=5 \
+    +agent.agent_args.max_steps=10 \
     +agent.agent_args.use_accumulate_history=True \
     trainer.total_epochs=1
 
