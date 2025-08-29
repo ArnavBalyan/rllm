@@ -254,6 +254,7 @@ class MultiAgentExecutionEngine:
                 observation, reward, done, info = await loop.run_in_executor(
                     None, env.step, final_action.action
                 )
+                print(f"DEBUG: env_idx={env_idx}, step={step_idx}, action={final_action.action}, reward={reward}, done={done}")
                 total_reward += reward
                 
                 step = Step(
@@ -380,11 +381,11 @@ class MultiAgentExecutionEngine:
         max_concurrency = len(self.envs)
         
         # Add logging to track environment count
-        print(f"\n{'='*60}")
-        print(f"DEBUG: trajectory_generator called")
-        print(f"  - Environment count: {len(self.envs)}")
-        print(f"  - Max concurrency: {max_concurrency}")
-        print(f"{'='*60}\n")
+        # print(f"\n{'='*60}")
+        # print(f"DEBUG: trajectory_generator called")
+        # print(f"  - Environment count: {len(self.envs)}")
+        # print(f"  - Max concurrency: {max_concurrency}")
+        # print(f"{'='*60}\n")
         
         # Wake up the rollout engine before starting trajectory generation
         self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.wake_up()
@@ -418,10 +419,10 @@ class MultiAgentExecutionEngine:
         
         tasks = [launch_workflow_trajectory(i) for i in range(len(self.envs))]
         
-        print(f"\n{'='*60}")
-        print(f"DEBUG: Created {len(tasks)} trajectory tasks")
-        print(f"  - Tasks will run concurrently with asyncio.as_completed")
-        print(f"{'='*60}\n")
+        # print(f"\n{'='*60}")
+        # print(f"DEBUG: Created {len(tasks)} trajectory tasks")
+        # print(f"  - Tasks will run concurrently with asyncio.as_completed")
+        # print(f"{'='*60}\n")
         
         completed_trajectories = []
         for task in asyncio.as_completed(tasks):
@@ -502,6 +503,8 @@ class MultiAgentExecutionEngine:
                     }
                 },
                 "phase_outputs": {},
+                "data_source": token_result.get("data_source", "unknown"),
+                "uid": token_result.get("uid", f"unknown_{i}"),
             })
         
         return formatted_results

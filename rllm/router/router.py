@@ -167,7 +167,7 @@ class Router:
             
             formatted_prompt = batch.non_tensor_batch["formatted_prompts"][batch_index]
             # Truncate prompt if it exceeds max_prompt_length
-            max_prompt_len = getattr(self.config.data, "max_prompt_length", None)
+            max_prompt_len = self.config.data.max_prompt_length
             if max_prompt_len is not None:
                 prompt_tokens = self.tokenizer.encode(formatted_prompt)
                 if len(prompt_tokens) > max_prompt_len:
@@ -176,20 +176,21 @@ class Router:
                     formatted_prompt = self.tokenizer.decode(prompt_tokens)
                     print(f"Truncated prompt from {original_len} to {len(prompt_tokens)} tokens")
 
-            # # Log the request being sent to the model
-            # print(f"\n{'='*80}")
-            # print(f"REQUEST TO MODEL (batch {batch_index + 1}/{batch_size}):")
-            # print(f"{'='*80}")
-            # print(f"Prompt: {formatted_prompt}")
-            # print(f"Sampling params: {kwargs}")
-            # print(f"{'='*80}\n")
+            # Log the request being sent to the model
+            print(f"\n{'='*80}")
+            print(f"REQUEST TO MODEL (batch {batch_index + 1}/{batch_size}):")
+            print(f"{'='*80}")
+            print(f"Prompt: {formatted_prompt}")
+            print(f"Sampling params: {kwargs}")
+            print(f"{'='*80}\n")
             
-            task = self.submit_completions(  # Changed from submit_chat_completions
+            task = self.submit_completions( 
                 address=address,
                 model=self.model_name,
-                prompt=formatted_prompt,  # Changed from messages
+                prompt=formatted_prompt,
                 **kwargs,
             )
+            # task = asyncio.create_task(self._hardcoded_down_response())
             tasks.append(task)
 
         # Potential blocking: asyncio.gather can block if any task takes too long
@@ -199,11 +200,11 @@ class Router:
 
         for batch_index, completions in enumerate(completions_list):
             # Log the response from the model
-            # print(f"\n{'='*80}")
-            # print(f"RESPONSE FROM MODEL (batch {batch_index + 1}/{batch_size}):")
-            # print(f"{'='*80}")
-            # print(f"Raw response: {completions}")
-            # print(f"{'='*80}\n")
+            print(f"\n{'='*80}")
+            print(f"RESPONSE FROM MODEL (batch {batch_index + 1}/{batch_size}):")
+            print(f"{'='*80}")
+            print(f"Raw response: {completions}")
+            print(f"{'='*80}\n")
             
             comps = []
             for choice in completions.get("choices", []):

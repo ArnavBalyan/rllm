@@ -157,16 +157,7 @@ class AgentExecutionEngine:
         self.n_parallel_agents = len(envs)
 
     async def _get_verl_async(self, prompt, application_id, **kwargs):
-        
-        # Debug log for VeRL call
-        print(f"\n{'='*60}")
-        print(f"DEBUG: _get_verl_async called")
-        print(f"  - Batch size: {len(self.envs) if hasattr(self, 'envs') else 'N/A'}")
-        print(f"  - Environment count: {self.n_parallel_agents}")
-        print(f"  - Application ID: {application_id}")
-        print(f"  - Timestamp: {time.time()}")
-        print(f"{'='*60}\n")
-        
+                
         batch = self._convert_prompt_verl([prompt], **kwargs)
 
         if "max_tokens" in kwargs:
@@ -446,6 +437,15 @@ class AgentExecutionEngine:
         if mode == "Text":
             return trajectory
         elif mode == "Token":
+            data_source = "unknown"
+            uid = f"unknown_{env.idx}"
+            if hasattr(env, 'task_data') and env.task_data:
+                data_source = env.task_data.get("data_source", "unknown")
+                uid = env.task_data.get("uid", f"unknown_{env.idx}")
+            elif hasattr(env, 'entry') and env.entry:
+                data_source = env.entry.get("data_source", "unknown")
+                uid = env.entry.get("uid", f"unknown_{env.idx}")
+            
             token_result = {
                 "prompt_tokens": torch.tensor(prompt_tokens, dtype=torch.long),
                 "response_tokens": torch.tensor(response_tokens, dtype=torch.long),
@@ -453,16 +453,13 @@ class AgentExecutionEngine:
                 "trajectory_reward": trajectory.reward,
                 "idx": env.idx,
                 "chat_completions": agent.chat_completions,
+                "data_source": data_source,
+                "uid": uid,
                 "metrics": {
-                    # Total number of steps taken in the trajectory
                     "steps": len(trajectory.steps),
-                    # Time to calculate reward
                     "reward_time": reward_time,
-                    # Total time spent in environment execution (env.step)
                     "env_time": env_time,
-                    # Time to calculate response tokens
                     "llm_time": llm_time,
-                    # Total time spent in the trajectory
                     "total_time": total_time,
                 },
             }

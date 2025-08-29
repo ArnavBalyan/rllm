@@ -193,13 +193,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         f"chain_of_experts/{k}_min": v_list.min(),
                         f"chain_of_experts/{k}_max": v_list.max(),
                     })
-        
-        metrics.update({
-            "chain_of_experts/workflow_type": self.workflow.workflow_id,
-            "chain_of_experts/agent_count": len(self.workflow.agent_configs),
-            "chain_of_experts/training_mode": self.training_mode,
-        })
-        
+                
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
             [torch.flip(i, dims=[0]) for i in all_initial_tokens_list],
             batch_first=True,
@@ -303,7 +297,8 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
     def _aggregate_workflow_score(self, workflow_result: Dict[str, Any]) -> float:
         agent_trajectories = workflow_result.get("agent_trajectories", {})
         final_agent_id = list(agent_trajectories.keys())[-1]
-        return agent_trajectories[final_agent_id].get("trajectory_reward", 0.0)
+        trajectory_reward = agent_trajectories[final_agent_id].get("trajectory_reward", 0.0)
+        return trajectory_reward
 
     def _create_chat_completion(self, workflow_result: Dict[str, Any]) -> Dict[str, Any]:
         """Create chat completion record for logging"""
@@ -397,6 +392,28 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                             reward_tensor = batch.batch["token_level_scores"]
                         
                         batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
+                        
+                        # Handle UID array properly
+                        uids = batch.non_tensor_batch.get("uid", [f"unknown_{i}" for i in range(len(batch.batch))])
+                        if isinstance(uids, np.ndarray):
+                            uids = uids.tolist()
+                        uids = np.array(uids)
+                        
+                        unique_uids = np.unique(uids)
+                        solve_none = 0
+                        solve_all = 0
+                        for uid in unique_uids:
+                            uid_mask = uids == uid
+                            uid_rewards = reward_tensor[uid_mask].sum(-1) 
+
+                            if (uid_rewards <= 0).all():
+                                solve_none += 1
+                            elif (uid_rewards >= 1).all():
+                                solve_all += 1
+
+                        metrics["batch/solve_none"] = solve_none
+                        metrics["batch/solve_all"] = solve_all
+                        metrics["batch/solve_partial"] = len(unique_uids) - solve_none - solve_all
                         
                         batch = compute_advantage(
                             batch,
@@ -511,12 +528,52 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             uid_lst.extend(test_batch.non_tensor_batch["uid"])
         
         all_rewards = np.concatenate(rewards_lst, axis=0)
+        data_sources = np.array(data_source_lst)
+        uid_tensor = np.array(uid_lst)
+        
+        unique_uids = np.unique(uid_tensor)
+        solve_none = solve_all = solve_partial = 0
+        for uid in unique_uids:
+            uid_mask = uid_tensor == uid
+            uid_rewards = all_rewards[uid_mask]
+            if (uid_rewards <= 0).all():
+                solve_none += 1
+            elif (uid_rewards >= 1).all():
+                solve_all += 1
+            else:
+                solve_partial += 1
+        
+        data_source_reward = {}
+        data_source_uid_pass_rates = {}
+        for i in range(all_rewards.shape[0]):
+            data_source = data_sources[i]
+            uid = uid_tensor[i]
+            
+            if data_source not in data_source_reward:
+                data_source_reward[data_source] = []
+                data_source_uid_pass_rates[data_source] = {}
+            data_source_reward[data_source].append(all_rewards[i])
+            
+            if uid not in data_source_uid_pass_rates[data_source]:
+                data_source_uid_pass_rates[data_source][uid] = 0
+            data_source_uid_pass_rates[data_source][uid] = max(data_source_uid_pass_rates[data_source][uid], all_rewards[i])
+        
         val_metrics = {
             "chain_of_experts/val_reward_mean": np.mean(all_rewards),
             "chain_of_experts/val_reward_max": np.max(all_rewards),
             "chain_of_experts/val_reward_min": np.min(all_rewards),
             "chain_of_experts/val_reward_std": np.std(all_rewards),
+            "chain_of_experts/solve_none": solve_none,
+            "chain_of_experts/solve_all": solve_all,
+            "chain_of_experts/solve_partial": solve_partial,
         }
+        
+        for data_source, rewards in data_source_reward.items():
+            rewards_array = np.clip(np.array(rewards), 0, 1)
+            val_metrics[f"chain_of_experts/val/test_score/{data_source}"] = np.mean(rewards_array)
+            
+            pass_k_lst = [pass_score >= 1 for pass_score in data_source_uid_pass_rates[data_source].values()]
+            val_metrics[f"chain_of_experts/val/test_score/pass@k/{data_source}"] = np.mean(pass_k_lst)
         
         return val_metrics
 

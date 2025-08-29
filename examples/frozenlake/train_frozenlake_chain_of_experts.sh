@@ -23,9 +23,9 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
-    actor_rollout_ref.actor.ppo_mini_batch_size=1 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=4 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=8192 \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=6144 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
@@ -61,9 +61,9 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='rllm-chain-of-experts' \
-    trainer.experiment_name='frozenlake-chain-of-experts-production' \
+    trainer.experiment_name='frozenlake-chain-of-experts-production-6k' \
     trainer.val_before_train=False \
-    trainer.n_gpus_per_node=1 \
+    trainer.n_gpus_per_node=2 \
     trainer.nnodes=1 \
     trainer.save_freq=10 \
     trainer.test_freq=2 \
@@ -79,6 +79,7 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     +agent.engine_args.disable_thinking=False \
     +agent.agent_args.max_steps=10 \
     +agent.agent_args.use_accumulate_history=True \
+    actor_rollout_ref.rollout.max_num_batched_tokens=6144 \
     trainer.total_epochs=1
 
 echo "FrozenLake Multi-Agent training completed!" 
