@@ -972,6 +972,13 @@ class AgentPPOTrainer(RayPPOTrainer):
         original_batch_size = batch.batch["prompts"].shape[0]
         batch, pad_size = pad_dataproto_to_divisor(batch, world_size)
 
+        # Initialize missing keys if they don't exist
+        if "is_last_step" not in batch.non_tensor_batch:
+            # For multi-agent Chain of Experts, all trajectories are complete episodes (last steps)
+            batch.non_tensor_batch["is_last_step"] = np.array([True] * batch.batch["prompts"].shape[0])
+        if "is_pad_step" not in batch.non_tensor_batch:
+            batch.non_tensor_batch["is_pad_step"] = np.array([False] * batch.batch["prompts"].shape[0])
+
         # for the padded dataproto, make the traj mask to 0. is_last_step also False
         for i in range(pad_size):
             idx = original_batch_size + i

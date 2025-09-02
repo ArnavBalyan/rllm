@@ -446,6 +446,10 @@ class MultiAgentExecutionEngine:
         
         # Sleep the rollout engine after all trajectories are completed
         self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.sleep()
+        # Add delay to ensure clean completion
+        import time as ts_imp
+        ts_imp.sleep(1)
+        
         
     def execute_chain_of_experts_batch(
         self, 
