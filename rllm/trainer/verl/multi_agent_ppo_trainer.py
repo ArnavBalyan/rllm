@@ -243,6 +243,13 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             "traj_mask": traj_mask,
         }
         
+        # non_tensors = {
+        #     "is_last_step": np.array([True] * len(tensor_batch["input_ids"])),  # All are last steps in Chain of Experts
+        #     "is_pad_step": np.array([False] * len(tensor_batch["input_ids"])),  # No padding in Chain of Experts
+        # }
+        
+        # return DataProto.from_dict(tensors=tensor_batch, non_tensors=non_tensors, meta_info=original_meta_info or {}), metrics
+
         return DataProto.from_dict(tensors=tensor_batch, meta_info=original_meta_info or {}), metrics
     
     def _create_unified_trajectory(self, workflow_result: Dict[str, Any]):

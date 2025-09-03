@@ -370,6 +370,11 @@ class AgentExecutionEngine:
                 # Update token collections
                 response_tokens.extend(truncated_response_tokens)
                 response_masks.extend(truncated_response_masks)
+                
+                # Log truncation details
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"TRUNCATION: Actor update output truncated. Original length: {response_token_len}, Max allowed: {self.max_response_length}, Truncated to: {len(truncated_response_tokens)}, Assistant msg tokens: {len(assistant_msg_tokens)}, Env msg tokens: {len(env_msg_tokens)}")
 
                 cur_step = agent.get_current_state()
                 if response_token_len - len(env_msg_tokens) > self.max_response_length:
