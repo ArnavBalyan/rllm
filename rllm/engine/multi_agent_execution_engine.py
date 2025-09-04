@@ -289,13 +289,45 @@ class MultiAgentExecutionEngine:
             
             from rllm.agents.utils import convert_messages_to_tokens_and_masks
             engine = self.role_engines[final_agent_id]
+            
+            # Truncate conversation if too long
+            max_tokens = engine.max_response_length
+            messages = final_agent.chat_completions
+            if len(messages) > 1:
+                # Count tokens backwards
+                current_tokens = 0
+                keep_count = 0
+                for i in range(len(messages) - 1, -1, -1):
+                    msg_content = messages[i].get("content", "")
+                    msg_tokens = len(engine.tokenizer.encode(msg_content, add_special_tokens=False))
+                    if current_tokens + msg_tokens <= max_tokens or i == len(messages) - 1:
+                        current_tokens += msg_tokens
+                        keep_count += 1
+                    else:
+                        break
+                truncated_messages = messages[-keep_count:]
+                
+                # Ensure we keep system message if it exists and isn't already included
+                if truncated_messages and messages and messages[0].get("role") == "system":
+                    if truncated_messages[0].get("role") != "system":
+                        truncated_messages = [messages[0]] + truncated_messages
+                        logger.info(f"MULTI_AGENT_TRUNCATION: Added system message back to truncated conversation")
+                
+                if len(truncated_messages) < len(messages):
+                    logger.info(f"MULTI_AGENT_TRUNCATION: Conversation truncated from {len(messages)} to {len(truncated_messages)} messages ({current_tokens} tokens, budget: {max_tokens})")
+            else:
+                truncated_messages = messages
+            
             prompt_tokens, response_masks = convert_messages_to_tokens_and_masks(
-                final_agent.chat_completions,
+                truncated_messages,
                 tokenizer=engine.tokenizer,
                 parser=engine.chat_parser,
                 contains_first_msg=True,
                 contains_generation_msg=True
             )
+            
+            # Log token conversion details
+            logger.info(f"MULTI_AGENT_TOKENS: Converting {len(truncated_messages)} messages to tokens. Result: {len(prompt_tokens)} tokens (budget: {max_tokens})")
             
             response_tokens = prompt_tokens 
             prompt_tokens = torch.tensor([], dtype=torch.long) 
