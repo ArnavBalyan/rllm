@@ -167,14 +167,14 @@ class Router:
             
             formatted_prompt = batch.non_tensor_batch["formatted_prompts"][batch_index]
             # Truncate prompt if it exceeds max_prompt_length
-            max_prompt_len = self.config.data.max_prompt_length
-            if max_prompt_len is not None:
-                prompt_tokens = self.tokenizer.encode(formatted_prompt)
-                if len(prompt_tokens) > max_prompt_len:
-                    original_len = len(prompt_tokens)
-                    prompt_tokens = prompt_tokens[-max_prompt_len:]
-                    formatted_prompt = self.tokenizer.decode(prompt_tokens)
-                    print(f"Truncated prompt from {original_len} to {len(prompt_tokens)} tokens")
+            # max_prompt_len = self.config.data.max_prompt_length
+            # if max_prompt_len is not None:
+            #     prompt_tokens = self.tokenizer.encode(formatted_prompt)
+            #     if len(prompt_tokens) > max_prompt_len:
+            #         original_len = len(prompt_tokens)
+            #         prompt_tokens = prompt_tokens[-max_prompt_len:]
+            #         formatted_prompt = self.tokenizer.decode(prompt_tokens)
+            #         print(f"Truncated prompt from {original_len} to {len(prompt_tokens)} tokens")
 
             # Log the request being sent to the model
             # print(f"\n{'='*80}")

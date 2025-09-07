@@ -12,13 +12,13 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=6 \
-    data.val_batch_size=6 \
+    data.train_batch_size=64 \
+    data.val_batch_size=64 \
     data.max_prompt_length=4096 \
     data.max_response_length=2048 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
     data.val_files=${RLLM_DIR}/data/rllm-frozenlake/test.parquet \
-    actor_rollout_ref.model.path=Qwen/Qwen3-0.6B \
+    actor_rollout_ref.model.path=Qwen/Qwen3-4B \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -42,8 +42,8 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.temperature=0.7 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
-    actor_rollout_ref.rollout.n=1 \
-    actor_rollout_ref.rollout.val_kwargs.n=1 \
+    actor_rollout_ref.rollout.n=2 \
+    actor_rollout_ref.rollout.val_kwargs.n=2 \
     actor_rollout_ref.rollout.val_kwargs.temperature=0.7 \
     actor_rollout_ref.rollout.val_kwargs.top_p=0.8 \
     actor_rollout_ref.rollout.val_kwargs.top_k=20 \
@@ -61,12 +61,12 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='rllm-chain-of-experts' \
-    trainer.experiment_name='frozenlake-chain-of-experts-production-6k-1.7B-production' \
+    trainer.experiment_name='frozenlake-chain-of-experts-production-6k-4B-production' \
     trainer.val_before_train=False \
-    trainer.n_gpus_per_node=1 \
+    trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=100000 \
-    trainer.test_freq=40 \
+    trainer.test_freq=15 \
     trainer.default_hdfs_dir=null \
     trainer.rejection_sample=False \
     trainer.rejection_sample_multiplier=2 \
