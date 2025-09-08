@@ -406,6 +406,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                         with _timer("save_checkpoint", timing_raw):
                             self._save_checkpoint()
 
+                self._write_latest_audit(batch, step_tag="train")
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
@@ -453,6 +454,12 @@ class AgentPPOTrainer(RayPPOTrainer):
                 test_output_gen_batch, _ = self.generate_agent_trajectory(meta_info=test_batch.meta_info)
 
             test_batch = test_batch.union(test_output_gen_batch)
+
+            # Write audit information for validation batch
+            try:
+                self._write_latest_audit(test_batch, step_tag="validation")
+            except Exception as e:
+                print(f"Warning: Failed to write validation audit information: {e}")
 
             reward_tensor = test_batch.batch["token_level_scores"]
 
@@ -986,3 +993,83 @@ class AgentPPOTrainer(RayPPOTrainer):
             batch.non_tensor_batch["is_pad_step"][idx] = True
 
         return batch
+
+    def _write_latest_audit(self, batch: DataProto, step_tag: str = "train"):
+        import os
+        from datetime import datetime
+        sample_k = 300
+        max_str = 2000
+
+        # Select indices (front of batch for determinism)
+        bs = batch.batch["prompts"].shape[0]
+        if bs == 0:
+            return
+        idxs = list(range(min(sample_k, bs)))
+
+        # Decode helpers
+        def _decode_tokens(t):
+            mask = t != self.tokenizer.pad_token_id
+            return self.tokenizer.decode(t[mask])[:max_str]
+
+        # Build records
+        records = []
+        prompts = batch.batch["prompts"]
+        responses = batch.batch["responses"]
+        attention_mask = batch.batch["attention_mask"]
+        token_level_scores = batch.batch.get("token_level_scores", None)
+        advantages = batch.batch.get("advantages", None)
+        old_log_probs = batch.batch.get("old_log_probs", None)
+        response_mask = batch.batch.get("response_mask", None)
+        uid_arr = batch.non_tensor_batch.get("uid", [f"unknown_{i}" for i in range(bs)])
+
+        for i in idxs:
+            prompt_text = _decode_tokens(prompts[i]) if prompts is not None else ""
+            resp_text = _decode_tokens(responses[i]) if responses is not None else ""
+            # last valid response token position
+            prompt_len = prompts[i].ne(self.tokenizer.pad_token_id).sum().item() if prompts is not None else 0
+            valid_resp = attention_mask[i, prompt_len:].sum().item() if attention_mask is not None else 0
+            last_pos = int(valid_resp - 1) if valid_resp > 0 else -1
+
+            rec = {
+                "step": int(self.global_steps),
+                "tag": step_tag,
+                "idx": i,
+                "uid": uid_arr[i] if isinstance(uid_arr, (list, tuple, np.ndarray)) else uid_arr,
+                "prompt_text_tail": prompt_text[-max_str:],
+                "response_text_tail": resp_text[-max_str:],
+                "last_reward_pos": last_pos,
+            }
+
+            if token_level_scores is not None:
+                try:
+                    rec["reward_last"] = float(token_level_scores[i, last_pos].item()) if last_pos >= 0 else 0.0
+                except Exception:
+                    rec["reward_last"] = None
+            if advantages is not None:
+                try:
+                    # if response_mask exists, average only unmasked tokens
+                    if response_mask is not None:
+                        m = response_mask[i].bool()
+                        masked_adv = advantages[i][m]
+                        rec["adv_mean_unmasked"] = float(masked_adv.mean().item()) if masked_adv.numel() else None
+                    else:
+                        rec["adv_mean"] = float(advantages[i].mean().item())
+                except Exception:
+                    rec["adv_mean_unmasked"] = None
+            if old_log_probs is not None and last_pos >= 0:
+                try:
+                    rec["old_log_prob_last"] = float(old_log_probs[i, last_pos].item())
+                    rec["old_prob_last"] = float(torch.exp(old_log_probs[i, last_pos]).item())
+                except Exception:
+                    rec["old_log_prob_last"] = None
+
+            records.append(rec)
+
+        out_path = "/home/ubuntu/rllm/agent_trainer_audit.json"
+        payload = {
+            "time": datetime.utcnow().isoformat() + "Z",
+            "global_step": int(self.global_steps),
+            "records": records,
+        }
+        with open(out_path, "w") as f:
+            json.dump(payload, f)

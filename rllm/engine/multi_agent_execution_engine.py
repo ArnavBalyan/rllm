@@ -378,7 +378,19 @@ class MultiAgentExecutionEngine:
             completed_turns = completed_turns + 1
         
         if mode == "Token":
-            
+            # Derive optional metadata for downstream consumers
+            data_source = "unknown"
+            uid = f"unknown_{env_idx}"
+            try:
+                if hasattr(env, 'task_data') and env.task_data:
+                    data_source = env.task_data.get("data_source", "unknown")
+                    uid = env.task_data.get("uid", f"unknown_{env_idx}")
+                elif hasattr(env, 'entry') and env.entry:
+                    data_source = env.entry.get("data_source", "unknown")
+                    uid = env.entry.get("uid", f"unknown_{env_idx}")
+            except Exception:
+                pass
+
             return {
                 "idx": env_idx,
                 "trajectory_reward": total_reward,
@@ -386,6 +398,8 @@ class MultiAgentExecutionEngine:
                 "response_tokens": torch.tensor(response_tokens, dtype=torch.long),  # All workflow responses
                 "response_masks": torch.tensor(response_masks, dtype=torch.long),
                 "chat_completions": chat_completions,
+                "data_source": data_source,
+                "uid": uid,
                 "metrics": {
                     "workflow_steps": len(trajectory.steps),
                     "phases_executed": len(self.phases),

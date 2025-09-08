@@ -12,8 +12,8 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=64 \
-    data.val_batch_size=64 \
+    data.train_batch_size=1 \
+    data.val_batch_size=1 \
     data.max_prompt_length=4096 \
     data.max_response_length=2048 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
@@ -66,7 +66,7 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=100000 \
-    trainer.test_freq=15 \
+    trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.rejection_sample=False \
     trainer.rejection_sample_multiplier=2 \
