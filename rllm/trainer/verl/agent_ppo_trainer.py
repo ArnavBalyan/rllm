@@ -381,6 +381,12 @@ class AgentPPOTrainer(RayPPOTrainer):
                     # compute global_valid tokens
                     batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
 
+                    # Write audit information after all batch processing is complete
+                    try:
+                        self._write_latest_audit(batch, step_tag="train")
+                    except Exception as e:
+                        print(f"Warning: Failed to write audit information: {e}")
+
                     # update critic
                     if self.use_critic:
                         with _timer("update_critic", timing_raw):
@@ -406,7 +412,6 @@ class AgentPPOTrainer(RayPPOTrainer):
                         with _timer("save_checkpoint", timing_raw):
                             self._save_checkpoint()
 
-                self._write_latest_audit(batch, step_tag="train")
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))

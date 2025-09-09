@@ -296,12 +296,12 @@ class MultiAgentExecutionEngine:
                 observation, reward, done, info = await loop.run_in_executor(
                     None, env.step, final_action.action
                 )
-                print(f"DEBUG: env_idx={env_idx}, step={step_idx}, action={final_action.action}, reward={reward}, done={done}")
+                # print(f"DEBUG: env_idx={env_idx}, step={step_idx}, action={final_action.action}, reward={reward}, done={done}")
                 total_reward += reward
-                
+                # print(f"DEBUG: phase_responses={' '.join(phase_responses[final_agent_id].split()[:500])}{'...' if len(phase_responses[final_agent_id].split()) > 500 else ''}")
                 step = Step(
                     observation=observation,
-                    model_response=f"Workflow: {' → '.join(phase_responses.keys())}",
+                    model_response=phase_responses[final_agent_id],
                     action=final_action.action,
                     reward=reward,
                     done=done,

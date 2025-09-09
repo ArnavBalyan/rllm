@@ -443,7 +443,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
                     batch = batch.union(old_log_prob)
                 # Minimal audit logging for the latest executed batch (overwrite-only)
-                self._write_latest_audit(batch, step_tag="train")
+                # self._write_latest_audit(batch, step_tag="train")
                 
                 if self.use_reference_policy:
                     with _timer("ref", timing_raw):
