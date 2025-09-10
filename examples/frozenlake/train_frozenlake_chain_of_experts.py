@@ -90,14 +90,14 @@ def create_frozenlake_chain_of_experts_agents(config):
             temperature=0.7,
             top_p=0.9,
         ),
-        AgentConfig(
-            agent_id="expert", 
-            agent_class=FrozenLakeExpertAgent,
-            agent_args={"max_steps": config.agent.max_steps},
-            role=AgentRole.SPECIALIST,
-            temperature=0.5,
-            top_p=0.8,
-        ),
+        # AgentConfig(
+        #     agent_id="expert", 
+        #     agent_class=FrozenLakeExpertAgent,
+        #     agent_args={"max_steps": config.agent.max_steps},
+        #     role=AgentRole.SPECIALIST,
+        #     temperature=0.5,
+        #     top_p=0.8,
+        # ),
         AgentConfig(
             agent_id="judge",
             agent_class=FrozenLakeJudgeAgent,
