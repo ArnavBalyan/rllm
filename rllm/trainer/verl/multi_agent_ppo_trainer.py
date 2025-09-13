@@ -265,6 +265,14 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             prompt_tokens = traj["prompt_tokens"]
             response_tokens = traj["response_tokens"]
             
+            # DEBUG: Log what we're getting from phase_data
+            print(f"🔍 TRAINER_DEBUG: agent={agent_id}")
+            print(f"  - prompt_tokens type: {type(prompt_tokens)}")
+            print(f"  - response_tokens type: {type(response_tokens)}")
+            print(f"  - prompt_tokens.numel(): {prompt_tokens.numel()}")
+            print(f"  - response_tokens.numel(): {response_tokens.numel()}")
+            print(f"  - traj keys: {list(traj.keys())}")
+            
             assert prompt_tokens.numel() != 0 and response_tokens.numel() != 0, f"Both prompt {prompt_tokens.numel()} and response {response_tokens.numel()} of trajectory shouldn't be empty. Please check make sure environment is working and the config"
             all_initial_tokens_list.append(prompt_tokens)
             all_response_tokens_list.append(response_tokens)
@@ -389,7 +397,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     print("CHAIN OF EXPERTS COMPLETE FOR THE CURRENT STEP")
 
                     for agent_id, agent_batch in final_gen_batch_output.items():
-                        if metrics_global[agent_id] is None:
+                        if agent_id not in metrics_global:
                             metrics_global[agent_id] = {}
 
                         print(f"Processing agent: {agent_id}")

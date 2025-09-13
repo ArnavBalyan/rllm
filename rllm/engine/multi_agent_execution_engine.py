@@ -236,6 +236,7 @@ class MultiAgentExecutionEngine:
         for phase in self.phases:
             agent_response_tokens[phase.agent_id] = []
             agent_response_masks[phase.agent_id] = []
+            agent_chat_completions[phase.agent_id] = []
         
         from rllm.agents.utils import convert_messages_to_tokens_and_masks
         final_agent_id = self.phases[-1].agent_id
@@ -315,26 +316,36 @@ class MultiAgentExecutionEngine:
                 obs_str = str(observation)
             
             # Process tokenization for each agent in the workflow
+            print(f"🔄 TOKENIZATION_LOOP: Processing {len(agents)} agents: {list(agents.keys())}")
+            
+            any_agent_truncated = False
             for agent_id, agent in agents.items():
+                print(f"🔄 PROCESSING_AGENT: {agent_id}")
                 agent_tokens, agent_masks, agent_truncated = self._process_agent_tokenization(
                     agent_id, agent, agents, mode
                 )
                 
+                print(f"🔄 AGENT_RESULT: {agent_id} returned {len(agent_tokens)} tokens, {len(agent_masks)} masks, truncated={agent_truncated}")
+                
+                # Always collect tokens and masks for all agents
                 agent_response_tokens[agent_id].extend(agent_tokens)
                 agent_response_masks[agent_id].extend(agent_masks)
                 agent_chat_completions[agent_id] = agent.chat_completions
                 
-                # Check for truncation and apply penalties
+                # Track if any agent was truncated
                 if agent_truncated:
-                    total_reward = 0.0
-                    termination_reason = "TRUNCATION"
-                    break
+                    any_agent_truncated = True
+            
+            # Apply truncation penalties after processing all agents
+            if any_agent_truncated:
+                total_reward = 0.0
+                termination_reason = "TRUNCATION"
                 
-                if termination_reason == "TRUNCATION":
-                    break
+            if termination_reason == "TRUNCATION":
+                break
                 
-                if done:
-                    break
+            if done:
+                break
             completed_turns = completed_turns + 1
         
         if mode == "Token":
@@ -456,36 +467,73 @@ class MultiAgentExecutionEngine:
                 contains_generation_msg=True
             )
         
+        # DEBUG: Log token extraction results
+        print(f"🔍 AGENT_TOKENIZATION_DEBUG: agent={agent_id}")
+        print(f"  - assistant_message present: {assistant_message is not None}")
+        print(f"  - env_messages present: {env_messages is not None and len(env_messages) > 0}")
+        print(f"  - assistant_msg_tokens length: {len(assistant_msg_tokens)}")
+        print(f"  - env_msg_tokens length: {len(env_msg_tokens)}")
+        print(f"  - assistant_msg_masks length: {len(assistant_msg_masks)}")
+        print(f"  - env_msg_masks length: {len(env_msg_masks)}")
+        
         # Combine assistant and environment tokens
         combined_tokens = assistant_msg_tokens + env_msg_tokens
         combined_masks = assistant_msg_masks + env_msg_masks
         
+        # DEBUG: Log combined token results
+        print(f"🔍 COMBINED_TOKENS_DEBUG: agent={agent_id}")
+        print(f"  - combined_tokens length: {len(combined_tokens)}")
+        print(f"  - combined_masks length: {len(combined_masks)}")
+        print(f"  - engine.max_response_length: {engine.max_response_length}")
+        
         # Check for truncation using agent's max response length
         if len(combined_tokens) >= engine.max_response_length:
-            # Truncation length
-            truncation_length = engine.max_response_length
+            # Truncation length (matching single agent calculation)
+            truncation_length = engine.max_response_length - len(combined_tokens)
+            
+            # DEBUG: Log truncation calculation
+            print(f"🚨 TRUNCATION_DEBUG: agent={agent_id}")
+            print(f"  - combined_tokens length: {len(combined_tokens)}")
+            print(f"  - max_response_length: {engine.max_response_length}")
+            print(f"  - truncation_length: {truncation_length}")
+            print(f"  - truncation_length < 0: {truncation_length < 0}")
+            
             # Truncate the response and masks
             if truncation_length < 0:
                 truncated_response_tokens = combined_tokens[:truncation_length]
                 truncated_response_masks = combined_masks[:truncation_length]
+                print(f"  - NEGATIVE truncation: took first {len(truncated_response_tokens)} tokens")
             else:
                 # Edge case where the response is exactly the max response length
-                truncated_response_tokens = combined_tokens[:truncation_length]
-                truncated_response_masks = combined_masks[:truncation_length]
+                truncated_response_tokens = combined_tokens
+                truncated_response_masks = combined_masks
+                print(f"  - NON-NEGATIVE truncation: took all {len(truncated_response_tokens)} tokens")
             
             # Log truncation details
             import logging
             logger = logging.getLogger(__name__)
             logger.info(f"MULTI_AGENT_TRUNCATION: Agent {agent_id} output truncated. Original length: {len(combined_tokens)}, Max allowed: {engine.max_response_length}, Truncated to: {len(truncated_response_tokens)}, Assistant msg tokens: {len(assistant_msg_tokens)}, Env msg tokens: {len(env_msg_tokens)}")
 
-            # Apply reward penalty if assistant response was truncated
-            if len(assistant_msg_tokens) > engine.max_response_length:
+            # Apply reward penalty if assistant response was truncated (matching single agent logic)
+            if len(combined_tokens) - len(env_msg_tokens) > engine.max_response_length:
                 # Set reward to 0 for this agent's current step
                 cur_step = agent.get_current_state()
                 if hasattr(cur_step, 'reward'):
                     cur_step.reward = 0.0
             
+            # DEBUG: Log final truncated return values
+            print(f"🔍 FINAL_RETURN_DEBUG (TRUNCATED): agent={agent_id}")
+            print(f"  - returning truncated_response_tokens length: {len(truncated_response_tokens)}")
+            print(f"  - returning truncated_response_masks length: {len(truncated_response_masks)}")
+            print(f"  - returning truncation_flag: True")
+            
             return truncated_response_tokens, truncated_response_masks, True
+        
+        # DEBUG: Log final non-truncated return values
+        print(f"🔍 FINAL_RETURN_DEBUG (NO_TRUNCATION): agent={agent_id}")
+        print(f"  - returning combined_tokens length: {len(combined_tokens)}")
+        print(f"  - returning combined_masks length: {len(combined_masks)}")
+        print(f"  - returning truncation_flag: False")
         
         return combined_tokens, combined_masks, False
                 
@@ -558,7 +606,7 @@ class MultiAgentExecutionEngine:
             print("TRAJECTORY TURNS SUMMARY:")
             print(f"{'='*60}")
             for idx, traj in enumerate(completed_trajectories):
-                steps = traj["metrics"]["workflow_steps"]
+                steps = traj["metrics"]["steps"]
                 bar = "█" * steps
                 print(f"Traj {idx}: {bar} ({steps} turns)")
             print(f"{'='*60}\n")
