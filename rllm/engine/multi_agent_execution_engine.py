@@ -176,7 +176,7 @@ class MultiAgentExecutionEngine:
             agent_engine_args["sampling_params"] = {
                 "temperature": agent_cfg.temperature,
                 "top_p": agent_cfg.top_p,
-                **agent_engine_args["sampling_params"]
+                **agent_engine_args.get("sampling_params", {})
             }
             
             agent_rollout_engine = rollout_engine[agent_cfg.agent_id]
@@ -243,7 +243,7 @@ class MultiAgentExecutionEngine:
         
         prompt_tokens = []
         termination_reason = None
-        
+        response_token_len = 0
         for step_idx in range(self.max_steps):
             
             for agent_id, agent in agents.items():
@@ -301,34 +301,34 @@ class MultiAgentExecutionEngine:
             if termination_reason == "TRUNCATION":
                 break
             
-            if final_action:
-                observation, reward, done, info = await loop.run_in_executor(
-                    None, env.step, final_action
+            # Always call env.step with final_action (matching single agent behavior)
+            observation, reward, done, info = await loop.run_in_executor(
+                None, env.step, final_action
+            )
+            # print(f"DEBUG: env_idx={env_idx}, step={step_idx}, action={final_action}, reward={reward}, done={done}")
+            total_reward = reward
+            # print(f"DEBUG: phase_responses={' '.join(phase_responses[final_agent_id].split()[:500])}{'...' if len(phase_responses[final_agent_id].split()) > 500 else ''}")
+            
+            # Update final agent's trajectory with environment feedback
+            final_agent = agents[final_agent_id]
+            if observation:
+                obs_str = str(observation)
+            
+            # Process tokenization for each agent in the workflow
+            for agent_id, agent in agents.items():
+                agent_tokens, agent_masks, agent_truncated = self._process_agent_tokenization(
+                    agent_id, agent, agents, mode
                 )
-                # print(f"DEBUG: env_idx={env_idx}, step={step_idx}, action={final_action.action}, reward={reward}, done={done}")
-                total_reward = reward
-                # print(f"DEBUG: phase_responses={' '.join(phase_responses[final_agent_id].split()[:500])}{'...' if len(phase_responses[final_agent_id].split()) > 500 else ''}")
                 
-                # Update final agent's trajectory with environment feedback
-                final_agent = agents[final_agent_id]
-                if observation:
-                    obs_str = str(observation)
+                agent_response_tokens[agent_id].extend(agent_tokens)
+                agent_response_masks[agent_id].extend(agent_masks)
+                agent_chat_completions[agent_id] = agent.chat_completions
                 
-                # Process tokenization for each agent in the workflow
-                for agent_id, agent in agents.items():
-                    agent_tokens, agent_masks, agent_truncated = self._process_agent_tokenization(
-                        agent_id, agent, agents, mode
-                    )
-                    
-                    agent_response_tokens[agent_id].extend(agent_tokens)
-                    agent_response_masks[agent_id].extend(agent_masks)
-                    agent_chat_completions[agent_id] = agent.chat_completions
-                    
-                    # Check for truncation and apply penalties
-                    if agent_truncated:
-                        total_reward = 0.0
-                        termination_reason = "TRUNCATION"
-                        break
+                # Check for truncation and apply penalties
+                if agent_truncated:
+                    total_reward = 0.0
+                    termination_reason = "TRUNCATION"
+                    break
                 
                 if termination_reason == "TRUNCATION":
                     break

@@ -229,7 +229,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 agent_batches[agent_id] = agent_batch
 
 
-        traj_metrics = workflow_results["metrics"]
+        traj_metrics = []
+        for traj in workflow_results:
+            traj_metrics.append(traj["metrics"])
+
         traj_metrics = {k: [d[k] for d in traj_metrics] for k in traj_metrics[0]}
         for k, v_list in traj_metrics.items():
             v_list = [v for v in v_list if v is not None and v >= 0]
@@ -269,7 +272,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             traj_scores.append(traj["trajectory_reward"])
             chat_completions.append(traj["chat_completions"])
 
-        save_dir = os.path.join(self.config.trainer.default_local_dir, "chat_completions/{agent_id}")
+        save_dir = os.path.join(self.config.trainer.default_local_dir, f"chat_completions/{agent_id}")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
             for chat_completion in chat_completions:
@@ -381,7 +384,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     
                     final_gen_batch_output, generate_metrics = self.generate_chain_of_experts_trajectories(
                         timing_raw=timing_raw, 
-                        meta_info=batch.meta_info
+                        meta_info=batch_global.meta_info
                     )
                     print("CHAIN OF EXPERTS COMPLETE FOR THE CURRENT STEP")
 
@@ -437,7 +440,8 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                             batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
 
                             with _timer("old_log_prob", timing_raw):
-                                old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
+                                agent_worker_group = self.agent_rollout_engines[agent_id].worker_group
+                                old_log_prob = agent_worker_group.compute_log_prob(batch)
                                 batch = batch.union(old_log_prob)
 
                             batch = compute_advantage(
@@ -450,7 +454,9 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                             )
                 
                         batch = self._pad_dataproto_to_world_size(batch=batch)
-                        self._balance_batch(batch, metrics=metrics_global[agent_id])
+                        agent_metrics = {}
+                        self._balance_batch(batch, metrics=agent_metrics)
+                        metrics_global[agent_id].update(agent_metrics)
 
                         batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
                 
@@ -464,7 +470,8 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         if self.config.trainer.critic_warmup <= self.global_steps:
                             # update actor
                             with _timer("update_actor", timing_raw):
-                                actor_output = self.actor_rollout_wg.update_actor(batch)
+                                agent_worker_group = self.agent_rollout_engines[agent_id].worker_group
+                                actor_output = agent_worker_group.update_actor(batch)
                             actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                             metrics_global[agent_id].update(actor_output_metrics)
                         print("actor update complete")
