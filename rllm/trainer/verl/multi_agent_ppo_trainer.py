@@ -209,72 +209,80 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
     
     def generate_chain_of_experts_trajectories(self, timing_raw=None, meta_info=None):
         """Generate Chain of Experts trajectories by processing batch through phases"""
-        
+        """Returns a list of agent results"""
+
         with _timer("collect_chain_of_experts_trajectories", timing_raw):
             workflow_results = self.multi_agent_engine.execute_chain_of_experts_batch(
                 timing_raw=timing_raw,
                 meta_info=meta_info
             )
+        
+        agent_batches = {}
+        metrics = {}
         with _timer("transform_chain_of_experts_trajectories", timing_raw):
-            final_gen_batch_output, metrics = self._transform_chain_of_experts_trajectories(workflow_results, meta_info)
-        
-        return final_gen_batch_output, metrics
+            agent_ids = [cfg.agent_id for cfg in self.workflow.agent_configs_list]
+            
+            for agent_id in agent_ids:
+                agent_batch = self._transform_agent_trajectories_for_agent(
+                    agent_id, workflow_results
+                )
+                agent_batches[agent_id] = agent_batch
+
+
+        traj_metrics = workflow_results["metrics"]
+        traj_metrics = {k: [d[k] for d in traj_metrics] for k in traj_metrics[0]}
+        for k, v_list in traj_metrics.items():
+            v_list = [v for v in v_list if v is not None and v >= 0]
+            if not v_list:
+                continue
+            v_list = np.array(v_list)
+            metrics.update(
+                {
+                    f"traj/{k}_mean": v_list.mean(),
+                    f"traj/{k}_min": v_list.min(),
+                    f"traj/{k}_max": v_list.max(),
+                }
+            )
+
+        return agent_batches, metrics
     
-    def _transform_chain_of_experts_trajectories(self, workflow_results: List[Dict[str, Any]], original_meta_info: Dict[str, Any] = None):
-        from verl.utils.torch_functional import pad_sequence_to_length
-        
+    def _transform_agent_trajectories_for_agent(self, agent_id: str, workflow_results: List[Dict[str, Any]]):
+        """Transform trajectories for a specific agent into tokenized DataProto format."""
+        from verl.utils.torch_functional import pad_sequence_to_length        
+
         all_initial_tokens_list = []
         all_response_tokens_list = []
         all_masks_list = []
         traj_scores = []
         chat_completions = []
-        traj_metrics = []
-        metrics = {}
+        
         for workflow_result in workflow_results:
-            if self.training_mode == "unified":
-                unified_trajectory = self._create_unified_trajectory(workflow_result)
-                prompt_tokens, response_tokens, response_masks, score = unified_trajectory
-                
-            elif self.training_mode == "final_agent":
-                final_trajectory = self._extract_final_agent_trajectory(workflow_result)
-                prompt_tokens, response_tokens, response_masks, score = final_trajectory
-                
-            else:
-                raise ValueError(f"Unknown training mode: {self.training_mode}")
+            traj = workflow_result["phase_data"][agent_id]
+
+            prompt_tokens = traj["prompt_tokens"]
+            response_tokens = traj["response_tokens"]
             
+            assert prompt_tokens.numel() != 0 and response_tokens.numel() != 0, f"Both prompt {prompt_tokens.numel()} and response {response_tokens.numel()} of trajectory shouldn't be empty. Please check make sure environment is working and the config"
             all_initial_tokens_list.append(prompt_tokens)
             all_response_tokens_list.append(response_tokens)
-            all_masks_list.append(response_masks)
-            traj_scores.append(score)
-            
-            chat_completion = self._create_chat_completion(workflow_result)
-            chat_completions.append(chat_completion)
-            
-            workflow_metrics = workflow_result.get("metrics", {})
-            traj_metrics.append(workflow_metrics)
-        
-        if traj_metrics:
-            traj_metrics = {k: [d.get(k, 0) for d in traj_metrics] for k in traj_metrics[0]}
-            for k, v_list in traj_metrics.items():
-                v_list = [v for v in v_list if v is not None and v >= 0]
-                if v_list:
-                    v_list = np.array(v_list)
-                    metrics.update({
-                        f"chain_of_experts/{k}_mean": v_list.mean(),
-                        f"chain_of_experts/{k}_min": v_list.min(),
-                        f"chain_of_experts/{k}_max": v_list.max(),
-                    })
-                
+            all_masks_list.append(traj["response_masks"])
+            traj_scores.append(traj["trajectory_reward"])
+            chat_completions.append(traj["chat_completions"])
+
+        save_dir = os.path.join(self.config.trainer.default_local_dir, "chat_completions/{agent_id}")
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
+            for chat_completion in chat_completions:
+                f.write(json.dumps(chat_completion) + "\n")
+
+        # Pad and create tensors (same logic as base class)
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
             [torch.flip(i, dims=[0]) for i in all_initial_tokens_list],
             batch_first=True,
             padding_value=self.tokenizer.pad_token_id,
         ).flip(dims=[1])
         
-        prompts_batch = pad_sequence_to_length(
-            prompts_batch, self.config.data.max_prompt_length, 
-            self.tokenizer.pad_token_id, left_pad=True
-        )
+        prompts_batch = pad_sequence_to_length(prompts_batch, self.config.data.max_prompt_length, self.tokenizer.pad_token_id, left_pad=True)
         
         response_batch = torch.nn.utils.rnn.pad_sequence(
             all_response_tokens_list,
@@ -283,10 +291,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         )
         
         max_response_length = self.config.data.max_response_length
-        response_batch = pad_sequence_to_length(
-            response_batch, max_response_length, 
-            self.tokenizer.pad_token_id, left_pad=False
-        )
+        response_batch = pad_sequence_to_length(response_batch, max_response_length, self.tokenizer.pad_token_id, left_pad=False)
         
         traj_mask = torch.nn.utils.rnn.pad_sequence(all_masks_list, batch_first=True, padding_value=0)
         traj_mask = pad_sequence_to_length(traj_mask, max_response_length, 0, left_pad=False)
@@ -295,10 +300,11 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         attention_mask = torch.where(trajectory_batch != self.tokenizer.pad_token_id, 1, 0)
         position_ids = (torch.cumsum(attention_mask, dim=1) - 1) * attention_mask
         
+        # Place all rewards to last response token
         score_batch = torch.zeros_like(response_batch, dtype=torch.float32)
         prompt_length = prompts_batch.shape[1]
         valid_response_length_sequences = attention_mask[:, prompt_length:].sum(dim=-1)
-
+        
         for i, traj_score in enumerate(traj_scores):
             last_valid_idx = valid_response_length_sequences[i] - 1
             if last_valid_idx >= 0 and last_valid_idx < score_batch.shape[1]:
@@ -314,100 +320,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             "traj_mask": traj_mask,
         }
         
-        # non_tensors = {
-        #     "is_last_step": np.array([True] * len(tensor_batch["input_ids"])),  # All are last steps in Chain of Experts
-        #     "is_pad_step": np.array([False] * len(tensor_batch["input_ids"])),  # No padding in Chain of Experts
-        # }
-        
-        # return DataProto.from_dict(tensors=tensor_batch, non_tensors=non_tensors, meta_info=original_meta_info or {}), metrics
-
-        return DataProto.from_dict(tensors=tensor_batch, meta_info=original_meta_info or {}), metrics
-    
-    def _create_unified_trajectory(self, workflow_result: Dict[str, Any]):
-        """Create a unified trajectory from all agents in the Chain of Experts"""
-        agent_trajectories = workflow_result.get("agent_trajectories", {})
-        
-        combined_prompt = ""
-        combined_response = ""
-        
-        if "task" in workflow_result:
-            task_data = workflow_result["task"]
-            if isinstance(task_data, dict) and "problem" in task_data:
-                combined_prompt = f"Problem: {task_data['problem']}\n\n"
-        
-        for agent_id, trajectory in agent_trajectories.items():
-            if "prompt_tokens" in trajectory and "response_tokens" in trajectory:
-                agent_prompt = self.tokenizer.decode(trajectory["prompt_tokens"])
-                agent_response = self.tokenizer.decode(trajectory["response_tokens"])
-                
-                combined_prompt += f"Agent {agent_id} context:\n{agent_prompt}\n\n"
-                combined_response += f"Agent {agent_id} response:\n{agent_response}\n\n"
-        
-        prompt_tokens = torch.tensor(
-            self.tokenizer.encode(combined_prompt, add_special_tokens=False), 
-            dtype=torch.long
-        )
-        response_tokens = torch.tensor(
-            self.tokenizer.encode(combined_response, add_special_tokens=False), 
-            dtype=torch.long
-        )
-        response_masks = torch.ones_like(response_tokens)
-        
-        score = self._aggregate_workflow_score(workflow_result)
-        
-        return prompt_tokens, response_tokens, response_masks, score
-    
-    def _extract_final_agent_trajectory(self, workflow_result: Dict[str, Any]):
-        """Extract trajectory from the final agent in the Chain of Experts"""
-        agent_trajectories = workflow_result.get("agent_trajectories", {})
-        
-        final_agent_id = list(agent_trajectories.keys())[-1]
-        final_trajectory = agent_trajectories[final_agent_id]
-        
-        prompt_tokens = final_trajectory.get("prompt_tokens", torch.tensor([self.tokenizer.eos_token_id]))
-        response_tokens = final_trajectory.get("response_tokens", torch.tensor([self.tokenizer.eos_token_id]))
-        response_masks = final_trajectory.get("response_masks", torch.ones_like(response_tokens))
-        
-        score = self._aggregate_workflow_score(workflow_result)
-        
-        return prompt_tokens, response_tokens, response_masks, score
-    
-    def _aggregate_workflow_score(self, workflow_result: Dict[str, Any]) -> float:
-        agent_trajectories = workflow_result.get("agent_trajectories", {})
-        final_agent_id = list(agent_trajectories.keys())[-1]
-        trajectory_reward = agent_trajectories[final_agent_id].get("trajectory_reward", 0.0)
-        return trajectory_reward
-
-    def _create_chat_completion(self, workflow_result: Dict[str, Any]) -> Dict[str, Any]:
-        """Create chat completion record for logging"""
-        return {
-            "workflow_type": self.workflow.workflow_id,
-            "batch_idx": workflow_result.get("batch_idx", -1),
-            "agent_count": len(workflow_result.get("agent_trajectories", {})),
-            "training_mode": self.training_mode,
-            "reward_aggregation": self.reward_aggregation,
-        }
-    
-    def train_all_agents_independently(self, batch):
-        """Train all agents independently using their separate ActorRolloutRefWorker instances"""
-        if not self.agent_rollout_engines:
-            return {}
-        
-        metrics = {}
-        timing_raw = {}
-        
-        # Train each agent with its own ActorRolloutRefWorker
-        for agent_id, agent_rollout_wg in self.agent_rollout_engines.items():
-            with _timer(f"update_agent_{agent_id}", timing_raw):
-                # Each agent gets its own batch copy
-                agent_batch = deepcopy(batch)
-                
-                # Train this specific agent's model
-                actor_output = agent_rollout_wg.update_actor(agent_batch)
-                agent_metrics = reduce_metrics(actor_output.meta_info["metrics"])
-                metrics.update({f"agent_{agent_id}/{k}": v for k, v in agent_metrics.items()})
-        
-        return metrics
+        return DataProto.from_dict(tensors=tensor_batch)
     
     def fit_multi_agent(self):
         """Enhanced training loop for Multi-Agent workflows"""
@@ -438,19 +351,19 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         
         for epoch in range(self.config.trainer.total_epochs):
             for batch_dict in self.train_dataloader:
-                batch: DataProto = DataProto.from_single_dict(batch_dict)
-                batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))], dtype=object)
-                batch = batch.repeat(
+                batch_global: DataProto = DataProto.from_single_dict(batch_dict)
+                batch_global.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch_global.batch))], dtype=object)
+                batch_global = batch_global.repeat(
                     repeat_times=self.config.actor_rollout_ref.rollout.n,
                     interleave=True,
                 )
-                print("Batch dict starting update")
+                print("batch_global dict starting update")
                 
-                metrics = {}
+                metrics_global = {}
                 timing_raw = {}
                 
-                batch.pop(batch_keys=["input_ids", "attention_mask", "position_ids"])
-                batch.meta_info = {
+                batch_global.pop(batch_keys=["input_ids", "attention_mask", "position_ids"])
+                batch_global.meta_info = {
                     "chain_of_experts_rollout": True,
                     "workflow_type": self.workflow.workflow_id,
                     "temperature": self.config.actor_rollout_ref.rollout.temperature,
@@ -460,7 +373,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 with _timer("chain_of_experts_batch", timing_raw):
                     print("Batch dict 367")
                     
-                    self.init_envs_and_agents(batch)
+                    self.init_envs_and_agents(batch_global)
                     print("Batch dict 370")
 
                     # at this point the system ahs multiple boards, and coordinator agent assigned
@@ -471,120 +384,108 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         meta_info=batch.meta_info
                     )
                     print("CHAIN OF EXPERTS COMPLETE FOR THE CURRENT STEP")
-                    batch = batch.union(final_gen_batch_output)
-                    metrics.update(generate_metrics)
-                    
-                    if self.use_critic:
-                        with _timer("values", timing_raw):
-                            values = self.critic_wg.compute_values(batch)
-                            batch = batch.union(values)
-                    
-                    with _timer("adv", timing_raw):
-                        if self.use_rm:
-                            reward_tensor = self.rm_wg.compute_rm_score(batch)
-                            batch = batch.union(reward_tensor)
-                        
-                        if "token_level_scores" not in batch.batch:
-                            reward_tensor = self.reward_fn(batch)
-                            batch.batch["token_level_scores"] = reward_tensor
-                        else:
-                            reward_tensor = batch.batch["token_level_scores"]
-                        
-                        batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
-                        
-                        # Handle UID array properly
-                        uids = batch.non_tensor_batch.get("uid", [f"unknown_{i}" for i in range(len(batch.batch))])
-                        if isinstance(uids, np.ndarray):
-                            uids = uids.tolist()
-                        uids = np.array(uids)
-                        
-                        unique_uids = np.unique(uids)
-                        solve_none = 0
-                        solve_all = 0
-                        for uid in unique_uids:
-                            uid_mask = uids == uid
-                            uid_rewards = reward_tensor[uid_mask].sum(-1) 
 
-                            if (uid_rewards <= 0).all():
-                                solve_none += 1
-                            elif (uid_rewards >= 1).all():
-                                solve_all += 1
+                    for agent_id, agent_batch in final_gen_batch_output.items():
+                        if metrics_global[agent_id] is None:
+                            metrics_global[agent_id] = {}
 
-                        metrics["batch/solve_none"] = solve_none
-                        metrics["batch/solve_all"] = solve_all
-                        metrics["batch/solve_partial"] = len(unique_uids) - solve_none - solve_all
+                        print(f"Processing agent: {agent_id}")
+                        batch = batch_global.deepcopy()
                         
-                        batch = compute_advantage(
-                            batch,
-                            adv_estimator=self.config.algorithm.adv_estimator,
-                            gamma=self.config.algorithm.gamma,
-                            lam=self.config.algorithm.lam,
-                            mask_truncated_samples=self.config.algorithm.mask_truncated_samples,
-                            clip_advantages=self.config.algorithm.clip_advantages,
-                        )
+                        local_batch = final_gen_batch_output[agent_id]
+                        batch = batch.union(local_batch)
+                        metrics_global[agent_id].update(generate_metrics[agent_id])
+                    
+                        if self.use_critic:
+                            with _timer("values", timing_raw):
+                                raise Exception("This should not be called")
+                                values = self.critic_wg.compute_values(batch)
+                                batch = batch.union(values)
+                    
+                        with _timer("adv", timing_raw):
+                            if self.use_rm:
+                                raise Exception("This should not be called")
+                                reward_tensor = self.rm_wg.compute_rm_score(batch)
+                                batch = batch.union(reward_tensor)
+                        
+                            if "token_level_scores" not in batch.batch:
+                                reward_tensor = self.reward_fn(batch)
+                                batch.batch["token_level_scores"] = reward_tensor
+                            else:
+                                reward_tensor = batch.batch["token_level_scores"]
+                                                
+                            uids = batch.non_tensor_batch["uid"]
+                            unique_uids = np.unique(uids)
+                            valid_mask = torch.ones(len(uids), dtype=torch.bool)
+                            solve_none = 0
+                            solve_all = 0
+                            solve_none = 0
+                            for uid in unique_uids:
+                                uid_mask = uids == uid
+                                uid_rewards = reward_tensor[uid_mask].sum(-1) 
+                                if (uid_rewards <= 0).all():
+                                    valid_mask[uid_mask] = False
+                                    solve_none += 1
+                                elif (uid_rewards >= 1).all():
+                                    valid_mask[uid_mask] = False
+                                    solve_all += 1
+
+                            metrics_global[agent_id]["batch/solve_none"] = solve_none
+                            metrics_global[agent_id]["batch/solve_all"] = solve_all
+                            metrics_global[agent_id]["batch/solve_partial"] = len(unique_uids) - solve_none - solve_all
+                            
+                            batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
+
+                            with _timer("old_log_prob", timing_raw):
+                                old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
+                                batch = batch.union(old_log_prob)
+
+                            batch = compute_advantage(
+                                batch,
+                                adv_estimator=self.config.algorithm.adv_estimator,
+                                gamma=self.config.algorithm.gamma,
+                                lam=self.config.algorithm.lam,
+                                mask_truncated_samples=self.config.algorithm.mask_truncated_samples,
+                                clip_advantages=self.config.algorithm.clip_advantages,
+                            )
                 
-                batch = self._pad_dataproto_to_world_size(batch=batch)
-                self._balance_batch(batch, metrics=metrics)
+                        batch = self._pad_dataproto_to_world_size(batch=batch)
+                        self._balance_batch(batch, metrics=metrics_global[agent_id])
+
+                        batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
                 
-                with _timer("old_log_prob", timing_raw):
-                    batch.meta_info.update({
-                        "micro_batch_size": self.config.actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu,
-                        "max_token_len": self.config.actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu,
-                        "use_dynamic_bsz": self.config.actor_rollout_ref.rollout.log_prob_use_dynamic_bsz,
-                    })
-                    old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
-                    batch = batch.union(old_log_prob)
-                # Minimal audit logging for the latest executed batch (overwrite-only)
-                # self._write_latest_audit(batch, step_tag="train")
+                        if self.use_critic:
+                            with _timer("update_critic", timing_raw):
+                                critic_output = self.critic_wg.update_critic(batch)
+                            critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
+                            metrics_global[agent_id].update(critic_output_metrics)
+                        print("critic update complete")
                 
-                if self.use_reference_policy:
-                    with _timer("ref", timing_raw):
-                        batch.meta_info.update({
-                            "micro_batch_size": self.config.actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu,
-                            "max_token_len": self.config.actor_rollout_ref.ref.log_prob_max_token_len_per_gpu,
-                            "use_dynamic_bsz": self.config.actor_rollout_ref.ref.log_prob_use_dynamic_bsz,
-                        })
-                        ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
-                        batch = batch.union(ref_log_prob)
+                        if self.config.trainer.critic_warmup <= self.global_steps:
+                            # update actor
+                            with _timer("update_actor", timing_raw):
+                                actor_output = self.actor_rollout_wg.update_actor(batch)
+                            actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
+                            metrics_global[agent_id].update(actor_output_metrics)
+                        print("actor update complete")
                 
-                batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
-                print("batch.meta_info generation complete")
-                
-                if self.use_critic:
-                    with _timer("update_critic", timing_raw):
-                        critic_output = self.critic_wg.update_critic(batch)
-                    critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
-                    metrics.update(critic_output_metrics)
-                print("critic update complete")
-                
-                # Train agents independently or use original behavior
-                if self.config.multi_agent.train_all_agents and self.agent_rollout_engines:
-                    with _timer("train_all_agents", timing_raw):
-                        agent_metrics = self.train_all_agents_independently(batch)
-                        metrics.update(agent_metrics)
-                elif self.config.trainer.critic_warmup <= self.global_steps:
-                    with _timer("update_actor", timing_raw):
-                        actor_output = self.actor_rollout_wg.update_actor(batch)
-                    actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
-                    metrics.update(actor_output_metrics)
-                print("actor update complete")
-                
-                if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
-                    with _timer("testing", timing_raw):
-                        print("validation started")
-                        val_metrics: dict = self._validate_multi_agent()
-                        print("validation complete")
-                    metrics.update(val_metrics)
-                
-                if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
-                    with _timer("save_checkpoint", timing_raw):
-                        self._save_checkpoint()
-                print("Checkpoint saved")
+                    if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
+                        with _timer("testing", timing_raw):
+                            print("validation started")
+                            val_metrics: dict = self._validate_multi_agent()
+                            print("validation complete")
+                        metrics_global["validation"] = {}
+                        metrics_global["validation"].update(val_metrics)
+
+                    if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
+                        with _timer("save_checkpoint", timing_raw):
+                            self._save_checkpoint()
+                    print("Checkpoint saved")
                 # Collect and log metrics
-                metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
-                metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
+                metrics_global.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
+                metrics_global.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
                 
-                logger.log(data=metrics, step=self.global_steps)
+                logger.log(data=metrics_global, step=self.global_steps)
                 self.global_steps += 1
                 
                 if self.global_steps >= self.total_training_steps:
@@ -616,11 +517,11 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         prompts = batch.batch["prompts"]
         responses = batch.batch["responses"]
         attention_mask = batch.batch["attention_mask"]
-        token_level_scores = batch.batch.get("token_level_scores", None)
-        advantages = batch.batch.get("advantages", None)
-        old_log_probs = batch.batch.get("old_log_probs", None)
-        response_mask = batch.batch.get("response_mask", None)
-        uid_arr = batch.non_tensor_batch.get("uid", [f"unknown_{i}" for i in range(bs)])
+        token_level_scores = batch.batch["token_level_scores"] if "token_level_scores" in batch.batch else None
+        advantages = batch.batch["advantages"] if "advantages" in batch.batch else None
+        old_log_probs = batch.batch["old_log_probs"] if "old_log_probs" in batch.batch else None
+        response_mask = batch.batch["response_mask"] if "response_mask" in batch.batch else None
+        uid_arr = batch.non_tensor_batch["uid"] if "uid" in batch.non_tensor_batch else [f"unknown_{i}" for i in range(bs)]
 
         for i in idxs:
             prompt_text = _decode_tokens(prompts[i]) if prompts is not None else ""
@@ -706,11 +607,14 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 timing_raw={},  # Add empty dict for timing_raw
                 meta_info=test_batch.meta_info
             )
-            test_batch = test_batch.union(test_output_gen_batch)
+            # Get final agent's batch for inference
+            final_agent_id = self.workflow.agent_configs_list[-1].agent_id
+            final_agent_batch = test_output_gen_batch[final_agent_id]
+            test_batch = test_batch.union(final_agent_batch)
             reward_tensor = test_batch.batch["token_level_scores"]
             rewards_lst.append(reward_tensor.sum(-1).cpu().numpy())
             
-            data_source_lst.extend(test_batch.non_tensor_batch.get("data_source", ["unknown"] * len(test_batch.batch)))
+            data_source_lst.extend(test_batch.non_tensor_batch["data_source"] if "data_source" in test_batch.non_tensor_batch else ["unknown"] * len(test_batch.batch))
             uid_lst.extend(test_batch.non_tensor_batch["uid"])
         
         all_rewards = np.concatenate(rewards_lst, axis=0)
@@ -762,94 +666,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             val_metrics[f"chain_of_experts/val/test_score/pass@k/{data_source}"] = np.mean(pass_k_lst)
         
         return val_metrics
-
-    def generate_agent_trajectory(self, timing_raw=None, meta_info=None):
-        """
-        Override to avoid async engine conflicts in multi-agent mode.
-        For Chain of Experts, we use our own trajectory generation.
-        """
-        if self.workflow is not None:
-            return self.generate_chain_of_experts_trajectories(timing_raw=timing_raw, meta_info=meta_info)
-        else:
-            if timing_raw is None:
-                timing_raw = {}
-            with _timer("collect_trajectory", timing_raw):
-                trajectories = []
-                trajectories = self.agent_execution_engine.generate_trajectories(timing_raw=timing_raw, mode="Token", meta_info=meta_info)
             
-            trajectories.sort(key=lambda x: x["idx"])
-            
-            from verl.utils.torch_functional import pad_sequence_to_length
-            
-            all_initial_tokens_list = []
-            all_response_tokens_list = []
-            all_masks_list = []
-            traj_scores = []
-            traj_metrics = []
-            
-            for traj in trajectories:
-                prompt_tokens = torch.tensor(traj.get("prompt_tokens", []), dtype=torch.long)
-                response_tokens = torch.tensor(traj.get("response_tokens", []), dtype=torch.long)
-                response_masks = torch.ones_like(response_tokens)
-                score = traj.get("reward", 0.0)
-                
-                all_initial_tokens_list.append(prompt_tokens)
-                all_response_tokens_list.append(response_tokens)
-                all_masks_list.append(response_masks)
-                traj_scores.append(score)
-                traj_metrics.append(traj.get("metrics", {}))
-            
-            if all_initial_tokens_list:
-                prompts_batch = torch.nn.utils.rnn.pad_sequence(
-                    [torch.flip(i, dims=[0]) for i in all_initial_tokens_list],
-                    batch_first=True,
-                    padding_value=self.tokenizer.pad_token_id,
-                ).flip(dims=[1])
-                
-                response_batch = torch.nn.utils.rnn.pad_sequence(
-                    all_response_tokens_list,
-                    batch_first=True,
-                    padding_value=self.tokenizer.pad_token_id,
-                )
-                
-                traj_mask = torch.nn.utils.rnn.pad_sequence(all_masks_list, batch_first=True, padding_value=0)
-                
-                trajectory_batch = torch.concat([prompts_batch, response_batch], dim=1)
-                attention_mask = torch.where(trajectory_batch != self.tokenizer.pad_token_id, 1, 0)
-                position_ids = (torch.cumsum(attention_mask, dim=1) - 1) * attention_mask
-                
-                score_batch = torch.zeros_like(response_batch, dtype=torch.float32)
-                prompt_length = prompts_batch.shape[1]
-                valid_response_length_sequences = attention_mask[:, prompt_length:].sum(dim=-1)
-                
-                for i, traj_score in enumerate(traj_scores):
-                    last_valid_idx = valid_response_length_sequences[i] - 1
-                    if last_valid_idx >= 0 and last_valid_idx < score_batch.shape[1]:
-                        score_batch[i, last_valid_idx] = traj_score
-                
-                tensor_batch = {
-                    "input_ids": trajectory_batch,
-                    "attention_mask": attention_mask,
-                    "position_ids": position_ids,
-                    "responses": response_batch,
-                    "prompts": prompts_batch,
-                    "token_level_scores": score_batch,
-                    "traj_mask": traj_mask,
-                }
-                
-                return DataProto.from_dict(tensors=tensor_batch), {}
-            else:
-                empty_tensor = torch.empty(0, dtype=torch.long)
-                tensor_batch = {
-                    "input_ids": empty_tensor,
-                    "attention_mask": empty_tensor,
-                    "position_ids": empty_tensor,
-                    "responses": empty_tensor,
-                    "prompts": empty_tensor,
-                    "token_level_scores": torch.empty(0, dtype=torch.float32),
-                    "traj_mask": empty_tensor,
-                }
-                return DataProto.from_dict(tensors=tensor_batch), {}
 
 
 def create_chain_of_experts_trainer(

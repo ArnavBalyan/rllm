@@ -176,7 +176,7 @@ class MultiAgentExecutionEngine:
             agent_engine_args["sampling_params"] = {
                 "temperature": agent_cfg.temperature,
                 "top_p": agent_cfg.top_p,
-                **agent_engine_args.get("sampling_params", {})
+                **agent_engine_args["sampling_params"]
             }
             
             agent_rollout_engine = rollout_engine[agent_cfg.agent_id]
@@ -227,12 +227,15 @@ class MultiAgentExecutionEngine:
         total_reward = 0.0
         final_tokens = []
         final_masks = []
-        chat_completions = []
         completed_turns = 0
         
         # Agent-level response tokens and masks tracking
         agent_response_tokens = {}
         agent_response_masks = {}
+        agent_chat_completions = {}
+        for phase in self.phases:
+            agent_response_tokens[phase.agent_id] = []
+            agent_response_masks[phase.agent_id] = []
         
         from rllm.agents.utils import convert_messages_to_tokens_and_masks
         final_agent_id = self.phases[-1].agent_id
@@ -317,13 +320,9 @@ class MultiAgentExecutionEngine:
                         agent_id, agent, agents, mode
                     )
                     
-                    # Update agent-level response tokens and masks
-                    if agent_id not in agent_response_tokens:
-                        agent_response_tokens[agent_id] = []
-                        agent_response_masks[agent_id] = []
-                    
                     agent_response_tokens[agent_id].extend(agent_tokens)
                     agent_response_masks[agent_id].extend(agent_masks)
+                    agent_chat_completions[agent_id] = agent.chat_completions
                     
                     # Check for truncation and apply penalties
                     if agent_truncated:
@@ -333,9 +332,6 @@ class MultiAgentExecutionEngine:
                 
                 if termination_reason == "TRUNCATION":
                     break
-
-                if hasattr(final_agent, 'chat_completions'):
-                    chat_completions = final_agent.chat_completions
                 
                 if done:
                     break
@@ -347,39 +343,55 @@ class MultiAgentExecutionEngine:
             uid = f"unknown_{env_idx}"
             try:
                 if hasattr(env, 'task_data') and env.task_data:
-                    data_source = env.task_data.get("data_source", "unknown")
-                    uid = env.task_data.get("uid", f"unknown_{env_idx}")
+                    data_source = env.task_data["data_source"]
+                    uid = env.task_data["uid"]
                 elif hasattr(env, 'entry') and env.entry:
-                    data_source = env.entry.get("data_source", "unknown")
-                    uid = env.entry.get("uid", f"unknown_{env_idx}")
+                    data_source = env.entry["data_source"]
+                    uid = env.entry["uid"]
             except Exception:
                 pass
 
-            # Combine all agent response tokens and masks for final output
+            # Prepare phase-level data for individual agent training
+            phase_data = {}
+            for phase in self.phases:
+                agent_id = phase.agent_id
+                if agent_id in agent_response_tokens:
+                    phase_data[agent_id] = {
+                        "response_tokens": torch.tensor(agent_response_tokens[agent_id], dtype=torch.long),
+                        "response_masks": torch.tensor(agent_response_masks[agent_id], dtype=torch.long),
+                        "prompt_tokens": torch.tensor(prompt_tokens, dtype=torch.long),  # Shared initial context
+                        "trajectory_reward": total_reward,  # Shared reward for now
+                        "phase_id": phase.phase_id,
+                        "agent_role": phase.agent_id,
+                        "chat_completions": agent_chat_completions[agent_id]
+                    }
+            
             all_response_tokens = []
             all_response_masks = []
-            for agent_id in self.phases:
-                if agent_id.agent_id in agent_response_tokens:
-                    all_response_tokens.extend(agent_response_tokens[agent_id.agent_id])
-                    all_response_masks.extend(agent_response_masks[agent_id.agent_id])
+            for phase in self.phases:
+                agent_id = phase.agent_id
+                if agent_id in agent_response_tokens:
+                    all_response_tokens.extend(agent_response_tokens[agent_id])
+                    all_response_masks.extend(agent_response_masks[agent_id])
             
             return {
                 "idx": env_idx,
                 "trajectory_reward": total_reward,
                 "prompt_tokens": torch.tensor(prompt_tokens, dtype=torch.long),     # Initial context (like single-agent)
-                "response_tokens": torch.tensor(all_response_tokens, dtype=torch.long),  # All workflow responses
+                "response_tokens": torch.tensor(all_response_tokens, dtype=torch.long),  # All workflow responses (combined)
                 "response_masks": torch.tensor(all_response_masks, dtype=torch.long),
-                "chat_completions": chat_completions,
+                "phase_data": phase_data,  # Individual phase-level data for agent training
                 "data_source": data_source,
                 "uid": uid,
                 "metrics": {
-                    "workflow_steps": len(agents[self.phases[-1].agent_id]._trajectory.steps),
+                    "steps": len(agents[self.phases[-1].agent_id]._trajectory.steps),
                     "phases_executed": len(self.phases),
                     "total_reward": total_reward,
                     "completed_turns": completed_turns,
                     "prompt_tokens_length": len(prompt_tokens),
                     "response_tokens_length": len(all_response_tokens),
-                    "response_masks_length": len(all_response_masks)
+                    "response_masks_length": len(all_response_masks),
+                    "phase_count": len(phase_data)
                 }
             }
         else:
@@ -546,7 +558,7 @@ class MultiAgentExecutionEngine:
             print("TRAJECTORY TURNS SUMMARY:")
             print(f"{'='*60}")
             for idx, traj in enumerate(completed_trajectories):
-                steps = traj.get("metrics", {}).get("workflow_steps", 0)
+                steps = traj["metrics"]["workflow_steps"]
                 bar = "█" * steps
                 print(f"Traj {idx}: {bar} ({steps} turns)")
             print(f"{'='*60}\n")
@@ -577,46 +589,12 @@ class MultiAgentExecutionEngine:
             if loop.is_running():
                 with ThreadPoolExecutor() as ex:
                     fut = ex.submit(asyncio.run, _collect_batch())
-                    batch_timeout = meta_info.get('batch_execution_timeout', self.trajectory_timeout) if meta_info else self.trajectory_timeout
+                    batch_timeout = meta_info['batch_execution_timeout']
                     results = fut.result(timeout=batch_timeout)
             else:
                 results = loop.run_until_complete(_collect_batch())
         except Exception as e:
             raise RuntimeError(f"Mutli-Agent batch execution failed: {str(e)}") from e
         
-        return self._format_results_for_training(results)
+        return results
     
-    def _format_results_for_training(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        if not results:
-            raise RuntimeError("Mutli-Agent execution produced no results")
-        
-        formatted_results = []
-        for i, token_result in enumerate(results):
-            if not token_result:
-                raise RuntimeError(f"Mutli-Agent result {i} is empty")
-            
-            required_fields = ["trajectory_reward", "chat_completions"]
-            for field in required_fields:
-                if field not in token_result:
-                    raise ValueError(f"Missing required field '{field}' in trajectory result {i}")
-            
-            formatted_results.append({
-                "workflow_type": self.workflow.workflow_id,
-                "batch_idx": token_result.get("idx", 0),
-                "agent_trajectories": {
-                    self.phases[-1].agent_id: {
-                        "prompt_tokens": token_result.get("prompt_tokens", torch.empty(0, dtype=torch.long)),
-                        "response_tokens": token_result.get("response_tokens", torch.empty(0, dtype=torch.long)),
-                        "response_masks": token_result.get("response_masks", torch.empty(0, dtype=torch.long)),
-                        "trajectory_reward": token_result.get("trajectory_reward", 0.0),
-                        "chat_completions": token_result.get("chat_completions", []),
-                        "metrics": token_result.get("metrics", {}),
-                    }
-                },
-                "phase_outputs": {},
-                "data_source": token_result.get("data_source", "unknown"),
-                "uid": token_result.get("uid", f"unknown_{i}"),
-            })
-        
-        return formatted_results
-        
