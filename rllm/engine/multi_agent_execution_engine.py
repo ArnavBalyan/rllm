@@ -180,10 +180,12 @@ class MultiAgentExecutionEngine:
                 **agent_engine_args.get("sampling_params", {})
             }
             
+            agent_rollout_engine = rollout_engine[agent_cfg.agent_id]
+            
             role_engines[agent_cfg.agent_id] = AgentExecutionEngine(
                 engine_name=engine_name,
                 tokenizer=tokenizer,
-                rollout_engine=rollout_engine,
+                rollout_engine=agent_rollout_engine,
                 config=global_config,
                 agent_class=agent_cfg.agent_class,
                 agent_args=agent_cfg.agent_args,
@@ -482,7 +484,7 @@ class MultiAgentExecutionEngine:
         # print(f"{'='*60}\n")
         
         # Wake up the rollout engine before starting trajectory generation
-        self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.wake_up()
+        # self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.wake_up()
                 
         async def launch_workflow_trajectory(env_idx: int):
             try:
@@ -539,10 +541,10 @@ class MultiAgentExecutionEngine:
             print(f"{'='*60}\n")
         
         # Sleep the rollout engine after all trajectories are completed
-        self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.sleep()
+        # self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.sleep()
         # Add delay to ensure clean completion
-        import time as ts_imp
-        ts_imp.sleep(1)
+        # import time as ts_imp
+        # ts_imp.sleep(1)
         
         
     def execute_chain_of_experts_batch(

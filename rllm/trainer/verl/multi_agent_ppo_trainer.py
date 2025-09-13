@@ -38,6 +38,7 @@ from verl.trainer.ppo.ray_trainer import (
     compute_timing_metrics,
     reduce_metrics,
 )
+from verl.single_controller.ray import RayClassWithInitArgs
 from rllm.misc import colorful_print
 
 
@@ -83,22 +84,89 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         self.multi_agent_config = multi_agent_config or {}
         self.multi_agent_engine = None
         
-        self.training_mode = self.multi_agent_config.get("training_mode", "final_agent") 
-        self.reward_aggregation = self.multi_agent_config.get("reward_aggregation", "final_agent")
+        self.training_mode = self.config.multi_agent.training_mode
+        self.reward_aggregation = self.config.multi_agent.reward_aggregation
+        self.agent_rollout_engines = {}
+    
+    def _init_multiple_agent_workers(self):
+        """Initialize separate ActorRolloutRefWorker instances for each agent"""
+        from verl.single_controller.ray.base import create_colocated_worker_cls
+        
+        # Arrays to store pools and worker groups outside the loop
+        self.agent_resource_pools = []
+        self.agent_worker_groups_array = []
+        
+        for agent_config in self.workflow.agent_configs_list:
+            agent_id = agent_config.agent_id
+            
+            # Create separate resource pool for this agent
+            agent_resource_pool_spec = {f"{agent_id}_pool": [1]}  # 1 GPU per agent
+            agent_mapping = {Role.ActorRollout: f"{agent_id}_pool"}
+            agent_rpm = ResourcePoolManager(agent_resource_pool_spec, agent_mapping)
+            agent_rpm.create_resource_pool()
+            
+            # Store resource pool in array
+            agent_resource_pool = agent_rpm.get_resource_pool(Role.ActorRollout)
+            self.agent_resource_pools.append(agent_resource_pool)
+            
+            # Create agent-specific config with different model path
+            agent_config_dict = self.config.copy()
+            if agent_config.model_path:
+                agent_config_dict.actor_rollout_ref.model.path = agent_config.model_path
+            
+            # Create RayClassWithInitArgs (following RayPPOTrainer pattern)
+            agent_rollout_cls = RayClassWithInitArgs(
+                cls=self.role_worker_mapping[Role.ActorRollout],
+                config=agent_config_dict.actor_rollout_ref,
+                role="actor_rollout",
+            )
+            
+            # Create worker group (following lines 841-845 from RayPPOTrainer)
+            resource_pool_to_cls = {agent_resource_pool: {"actor_rollout": agent_rollout_cls}}
+            
+            for resource_pool, class_dict in resource_pool_to_cls.items():
+                worker_dict_cls = create_colocated_worker_cls(class_dict=class_dict)
+                wg_dict = self.ray_worker_group_cls(resource_pool=resource_pool, ray_cls_with_init=worker_dict_cls)
+                spawn_wg = wg_dict.spawn(prefix_set=class_dict.keys())
+                
+                # Get the actor_rollout worker group and init model
+                agent_wg = spawn_wg['actor_rollout']
+                agent_wg.init_model()  # Each agent loads its own model
+                
+                # Create AsyncLLMServerManager for proper multi-agent isolation
+                from verl.workers.rollout.async_server import AsyncLLMServerManager
+                agent_async_manager = AsyncLLMServerManager(
+                    config=agent_config_dict.actor_rollout_ref,
+                    worker_group=agent_wg,
+                    scheduler_kwargs={"agent_id": agent_id} 
+                )
+                self.agent_rollout_engines[agent_id] = agent_async_manager
+                self.agent_worker_groups_array.append(agent_wg)  # Store in array
+                print(f"Created AsyncLLMServerManager for agent '{agent_id}' with model: {agent_config.model_path or 'default'}")
+        
+        if self.use_critic and self.agent_resource_pools:
+            first_agent_pool = self.agent_resource_pools[0]
+            
+            critic_cls = RayClassWithInitArgs(
+                cls=self.role_worker_mapping[Role.Critic], 
+                config=self.config.critic
+            )
+            
+            resource_pool_to_cls = {first_agent_pool: {"critic": critic_cls}}
+            
+            for resource_pool, class_dict in resource_pool_to_cls.items():
+                worker_dict_cls = create_colocated_worker_cls(class_dict=class_dict)
+                wg_dict = self.ray_worker_group_cls(resource_pool=resource_pool, ray_cls_with_init=worker_dict_cls)
+                spawn_wg = wg_dict.spawn(prefix_set=class_dict.keys())
+                
+                self.critic_wg = spawn_wg['critic']
+                self.critic_wg.init_model()
     
     def init_workers(self):
-        super().init_workers()
+        self._init_multiple_agent_workers()
         
         if self.workflow is not None:
-            if self.hybrid_engine:
-                agent_rollout_wg = self.actor_rollout_wg
-            else:
-                agent_rollout_wg = self.rollout_wg
-
-            if self.config.actor_rollout_ref.rollout.mode == "async":
-                rollout_engine = self.async_rollout_manager
-            else:
-                rollout_engine = agent_rollout_wg
+            rollout_engine = self.agent_rollout_engines
 
             self.multi_agent_engine = MultiAgentExecutionEngine(
                 workflow=self.workflow,
@@ -114,6 +182,8 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 **self.config.agent.get("engine_args", {}),
             )
             
+            # For compatibility with base class, set these attributes to the final agent's engine
+            # but actual training will use agent_rollout_engines for independent training
             final_agent_id = self.workflow.agent_configs_list[-1].agent_id
             final_agent_engine = self.multi_agent_engine.role_engines[final_agent_id]
             
@@ -317,6 +387,27 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             "reward_aggregation": self.reward_aggregation,
         }
     
+    def train_all_agents_independently(self, batch):
+        """Train all agents independently using their separate ActorRolloutRefWorker instances"""
+        if not self.agent_rollout_engines:
+            return {}
+        
+        metrics = {}
+        timing_raw = {}
+        
+        # Train each agent with its own ActorRolloutRefWorker
+        for agent_id, agent_rollout_wg in self.agent_rollout_engines.items():
+            with _timer(f"update_agent_{agent_id}", timing_raw):
+                # Each agent gets its own batch copy
+                agent_batch = batch.copy()
+                
+                # Train this specific agent's model
+                actor_output = agent_rollout_wg.update_actor(agent_batch)
+                agent_metrics = reduce_metrics(actor_output.meta_info["metrics"])
+                metrics.update({f"agent_{agent_id}/{k}": v for k, v in agent_metrics.items()})
+        
+        return metrics
+    
     def fit_multi_agent(self):
         """Enhanced training loop for Multi-Agent workflows"""
         if self.workflow is None:
@@ -465,7 +556,12 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     metrics.update(critic_output_metrics)
                 print("critic update complete")
                 
-                if self.config.trainer.critic_warmup <= self.global_steps:
+                # Train agents independently or use original behavior
+                if self.config.multi_agent.train_all_agents and self.agent_rollout_engines:
+                    with _timer("train_all_agents", timing_raw):
+                        agent_metrics = self.train_all_agents_independently(batch)
+                        metrics.update(agent_metrics)
+                elif self.config.trainer.critic_warmup <= self.global_steps:
                     with _timer("update_actor", timing_raw):
                         actor_output = self.actor_rollout_wg.update_actor(batch)
                     actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
@@ -755,36 +851,58 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 return DataProto.from_dict(tensors=tensor_batch), {}
 
 
-# Factory function for creating Chain of Experts trainer
 def create_chain_of_experts_trainer(
-    base_trainer: AgentPPOTrainer,
+    config,
+    tokenizer,
+    role_worker_mapping,
+    resource_pool_manager,
     agent_configs: List[AgentConfig],
+    ray_worker_group_cls=RayWorkerGroup,
+    reward_fn=None,
+    val_reward_fn=None,
+    env_class=None,
+    agent_class=None,
+    env_args=None,
+    agent_args=None,
+    multi_agent_config: Dict[str, Any] = None,
     **kwargs
 ) -> MultiAgentPPOTrainer:
     """
     Create a trainer for Chain of Experts workflow.
     
     Args:
-        base_trainer: Existing AgentPPOTrainer instance
+        config: Training configuration
+        tokenizer: Tokenizer instance
+        role_worker_mapping: Mapping of roles to worker types
+        resource_pool_manager: Resource pool manager
         agent_configs: List of agent configurations in chain order
-        **kwargs: Additional multi-agent configuration options
+        ray_worker_group_cls: Ray worker group class
+        reward_fn: Reward function
+        val_reward_fn: Validation reward function
+        env_class: Environment class
+        agent_class: Agent class
+        env_args: Environment arguments
+        agent_args: Agent arguments
+        multi_agent_config: Multi-agent configuration options
+        **kwargs: Additional configuration options
         
     Returns:
         MultiAgentPPOTrainer configured for Chain of Experts
     """
     workflow = ChainOfExpertsWorkflow(agent_configs)
     return MultiAgentPPOTrainer(
-        config=base_trainer.config,
-        tokenizer=base_trainer.tokenizer,
-        role_worker_mapping=base_trainer.role_worker_mapping,
-        resource_pool_manager=base_trainer.resource_pool_manager,
-        ray_worker_group_cls=base_trainer.ray_worker_group_cls,
-        reward_fn=base_trainer.reward_fn,
-        val_reward_fn=base_trainer.val_reward_fn,
-        env_class=base_trainer.env_class,
-        agent_class=base_trainer.agent_class,
-        env_args=base_trainer.env_args,
-        agent_args=base_trainer.agent_args,
+        config=config,
+        tokenizer=tokenizer,
+        role_worker_mapping=role_worker_mapping,
+        resource_pool_manager=resource_pool_manager,
+        ray_worker_group_cls=ray_worker_group_cls,
+        reward_fn=reward_fn,
+        val_reward_fn=val_reward_fn,
+        env_class=env_class,
+        agent_class=agent_class,
+        env_args=env_args,
+        agent_args=agent_args,
         workflow=workflow,
+        multi_agent_config=multi_agent_config,
         **kwargs
     ) 

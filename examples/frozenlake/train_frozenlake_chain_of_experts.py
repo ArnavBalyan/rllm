@@ -87,6 +87,7 @@ def create_frozenlake_chain_of_experts_agents(config):
             agent_class=FrozenLakeProposerAgent,
             agent_args={"max_steps": config.agent.max_steps},
             role=AgentRole.PROPOSER,
+            model_path=config.actor_rollout_ref.model.path,  # Can be different model
             temperature=0.7,
             top_p=0.9,
         ),
@@ -103,6 +104,7 @@ def create_frozenlake_chain_of_experts_agents(config):
             agent_class=FrozenLakeJudgeAgent,
             agent_args={"max_steps": config.agent.max_steps},
             role=AgentRole.JUDGE,
+            model_path=config.actor_rollout_ref.model.path,  # Can be different model
             temperature=0.3,
             top_p=0.7,
         )
@@ -146,13 +148,14 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
         Role.Critic: ray.remote(CriticWorker),
     }
 
-    global_pool_id = "global_pool"
+    # Resource pools are now managed internally by MultiAgentPPOTrainer
+    # when train_all_agents=true is set
     resource_pool_spec = {
-        global_pool_id: [config.trainer.n_gpus_per_node] * config.trainer.nnodes,
+        "global_pool_id": [config.trainer.n_gpus_per_node] * config.trainer.nnodes,
     }
     mapping = {
-        Role.ActorRollout: global_pool_id,
-        Role.Critic: global_pool_id,
+        Role.ActorRollout: "global_pool_id",
+        Role.Critic: "global_pool_id",
     }
 
     if config.algorithm.use_kl_in_reward or config.actor_rollout_ref.actor.use_kl_loss:
@@ -175,7 +178,26 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
     if config.agent.get("agent_args") is not None:
         agent_args.update(config.agent.get("agent_args"))
 
-    base_trainer = AgentPPOTrainer(
+    agent_configs = create_frozenlake_chain_of_experts_agents(config)
+    
+    for agent_config in agent_configs:
+        print(f"  - {agent_config.agent_id} ({agent_config.role.value}): {agent_config.agent_class.__name__}")
+
+    # Add multi_agent config to main config
+    config.multi_agent = {
+        "training_mode": "final_agent",  
+        "reward_aggregation": "final_agent",
+        "train_all_agents": True,  # Enable independent agent training
+    }
+    
+    multi_agent_config = config.multi_agent
+
+    # Create Chain of Experts workflow directly
+    from rllm.engine.multi_agent_execution_engine import ChainOfExpertsWorkflow
+    workflow = ChainOfExpertsWorkflow(agent_configs)
+    
+    # Create MultiAgentPPOTrainer directly without base trainer
+    trainer = MultiAgentPPOTrainer(
         config=config,
         tokenizer=tokenizer,
         role_worker_mapping=role_worker_mapping,
@@ -187,22 +209,8 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
         agent_class=agent_class,
         env_args=env_args,
         agent_args=agent_args,
-    )
-
-    agent_configs = create_frozenlake_chain_of_experts_agents(config)
-    
-    for agent_config in agent_configs:
-        print(f"  - {agent_config.agent_id} ({agent_config.role.value}): {agent_config.agent_class.__name__}")
-
-    multi_agent_config = {
-        "training_mode": "final_agent",  
-        "reward_aggregation": "final_agent",
-    }
-
-    trainer = create_chain_of_experts_trainer(
-        base_trainer=base_trainer,
-        agent_configs=agent_configs,
-        multi_agent_config=multi_agent_config
+        workflow=workflow,
+        multi_agent_config=multi_agent_config,
     )
     
     trainer.init_workers()
