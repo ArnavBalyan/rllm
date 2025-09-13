@@ -5,6 +5,7 @@ import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import deepcopy
 from functools import reduce
 from pprint import pprint
 from queue import Queue
@@ -399,7 +400,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         for agent_id, agent_rollout_wg in self.agent_rollout_engines.items():
             with _timer(f"update_agent_{agent_id}", timing_raw):
                 # Each agent gets its own batch copy
-                agent_batch = batch.copy()
+                agent_batch = deepcopy(batch)
                 
                 # Train this specific agent's model
                 actor_output = agent_rollout_wg.update_actor(agent_batch)

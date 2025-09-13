@@ -53,37 +53,7 @@ Focus on SAFETY and STRATEGY rather than just the shortest path.
         self.step = 0
         self.reset()
 
-    @property
-    def chat_completions(self) -> List[Dict[str, str]]:
-        """Combine FrozenLake conversation history with simple Chain context"""
-        base_messages = FrozenLakeAgent.chat_completions.fget(self)
-        
-        if self.multi_agent_context and "chain_context" in self.multi_agent_context:
-            context_content = self.multi_agent_context["chain_context"]
-            context_msg = {"role": "user", "content": f"CHAIN CONTEXT:\n{context_content}"}
-            if len(base_messages) > 1:
-                return [base_messages[0], context_msg] + base_messages[1:]
-            else:
-                return base_messages + [context_msg]
-        
-        return base_messages
-
-    def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
-        """Update proposer agent with environment observation and chain context"""
-        MultiAgentBase.update_from_env(self, observation, reward, done, info, **kwargs)
-        
-        actual_observation = observation
-        if isinstance(observation, dict) and "base_observation" in observation:
-            actual_observation = observation["base_observation"]
-        
-        FrozenLakeAgent.update_from_env(self, actual_observation, reward, done, info, **kwargs)
-        
-        # NOTE: Step-wise history is automatically maintained by FrozenLakeAgent's use_accumulate_history=True
-        # This means each agent keeps track of all previous environment steps and model responses
-        # which provides context the user requested
-        
-    def update_from_model(self, response: str, **kwargs) -> Action:
-        return FrozenLakeAgent.update_from_model(self, response, **kwargs)
+    # All methods inherited from MultiAgentBase and FrozenLakeAgent
 
 
 class FrozenLakeExpertAgent(FrozenLakeAgent, MultiAgentBase):
@@ -130,32 +100,7 @@ Focus on PRECISE EXECUTION of the proposed strategy.
         self.step = 0
         self.reset()
 
-    @property
-    def chat_completions(self) -> List[Dict[str, str]]:
-        base_messages = FrozenLakeAgent.chat_completions.fget(self)
-        
-        if self.multi_agent_context and "chain_context" in self.multi_agent_context:
-            context_content = self.multi_agent_context["chain_context"]
-            context_msg = {"role": "user", "content": f"CHAIN CONTEXT:\n{context_content}"}
-            if len(base_messages) > 1:
-                return [base_messages[0], context_msg] + base_messages[1:]
-            else:
-                return base_messages + [context_msg]
-        
-        return base_messages
-
-    def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
-        MultiAgentBase.update_from_env(self, observation, reward, done, info, **kwargs)
-        
-        actual_observation = observation
-        if isinstance(observation, dict) and "base_observation" in observation:
-            actual_observation = observation["base_observation"]
-        
-        FrozenLakeAgent.update_from_env(self, actual_observation, reward, done, info, **kwargs)
-        
-    def update_from_model(self, response: str, **kwargs) -> Action:
-        """Use FrozenLakeAgent's action parsing logic"""
-        return FrozenLakeAgent.update_from_model(self, response, **kwargs)
+    # All methods inherited from MultiAgentBase and FrozenLakeAgent
 
 
 class FrozenLakeJudgeAgent(FrozenLakeAgent, MultiAgentBase):
@@ -202,28 +147,4 @@ Focus on SAFETY VALIDATION and OPTIMAL CHOICE SELECTION.
         self.step = 0
         self.reset()
 
-    @property
-    def chat_completions(self) -> List[Dict[str, str]]:
-        base_messages = FrozenLakeAgent.chat_completions.fget(self)
-        
-        if self.multi_agent_context and "chain_context" in self.multi_agent_context:
-            context_content = self.multi_agent_context["chain_context"]
-            context_msg = {"role": "user", "content": f"CHAIN CONTEXT:\n{context_content}"}
-            if len(base_messages) > 1:
-                return [base_messages[0], context_msg] + base_messages[1:]
-            else:
-                return base_messages + [context_msg]
-        
-        return base_messages
-
-    def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
-        MultiAgentBase.update_from_env(self, observation, reward, done, info, **kwargs)
-        
-        actual_observation = observation
-        if isinstance(observation, dict) and "base_observation" in observation:
-            actual_observation = observation["base_observation"]
-        
-        FrozenLakeAgent.update_from_env(self, actual_observation, reward, done, info, **kwargs)
-        
-    def update_from_model(self, response: str, **kwargs) -> Action:
-        return FrozenLakeAgent.update_from_model(self, response, **kwargs)
+    # All methods inherited from MultiAgentBase and FrozenLakeAgent

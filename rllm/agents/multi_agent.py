@@ -20,74 +20,82 @@ class MultiAgentBase(BaseAgent):
         self._trajectory = Trajectory()
         self.multi_agent_context: Dict[str, Any] = {}
         
-    @property
-    def chat_completions(self) -> List[Dict[str, str]]:
-        """Convert internal state to chat completions format"""
-        messages = []
-        
-        if self.system_prompt:
-            messages.append({"role": "system", "content": self.system_prompt})
-
-        if self.multi_agent_context:
-            context_content = self._format_multi_agent_context()
-            if context_content:
-                messages.append({"role": "system", "content": context_content})
-
-        for step in self._trajectory.steps:
-            if step.observation:
-                messages.append({"role": "user", "content": str(step.observation)})
-            if step.model_response:
-                messages.append({"role": "assistant", "content": step.model_response})
-                
-        return messages
     
+    def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
+        """
+        Updates the agent's internal state after an environment step.
+        Includes logic to check if the observation changed from the previous step.
+        """
+        current_obs_str = str(observation)
+        user_prompt_content = f"Current Observation ({self.step}): \n" + current_obs_str + "\n" + "You have not achieved the goal, P has not reached G yet. Please give the next action."
+
+        if self._trajectory.steps and self._trajectory.steps[-1].action is not None:  # Check if the last step has an action (meaning it's a completed step)
+            last_step_obs_str = self._trajectory.steps[-1].observation
+            if last_step_obs_str == current_obs_str:
+                user_prompt_content += "\nYour last response is invalid. Your position didn't change at all. You may need to recheck your thinking process, action outputted, and the format of response. Remember, you should only output the NEXT ACTION at each interation in the ``` ```. For example, if you want to move up, you should output ```Up```."
+
+        if self.max_steps is not None and self.max_steps - self.step > 0:
+            user_prompt_content += f"\nThe maximum number of steps remaining is {self.max_steps - self.step}."
+
+        self.messages.append({"role": "user", "content": user_prompt_content})
+        self.current_observation = current_obs_str
+
+    def update_from_model(self, response: str, **kwargs) -> Action:
+        content = response
+
+        if not self.accumulate_thinking:
+            _, sep, after = content.partition("</think>")
+            if sep:
+                content = after
+
+        thought, action_str = self._parse_model_response(content)
+
+        new_step = Step(chat_completions=copy.deepcopy(self.chat_completions), thought=thought, action=action_str, model_response=content, observation=self.current_observation)
+        self._trajectory.steps.append(new_step)
+
+        self.messages.append({"role": "assistant", "content": content})
+
+        self.step += 1
+
+        return Action(action=action_str)
+
+    def _parse_model_response(self, response: str) -> tuple[str, str]:
+        DIRECTION_MAP = {"left": 1, "down": 2, "right": 3, "up": 4}
+
+        thought = response
+        action_str = str(FrozenLakeEnv.INVALID_ACTION)
+
+        matches = re.findall(r"```(.*?)```", response, re.DOTALL)
+
+        if matches:
+            last_match_content = matches[-1].strip()
+            last_match_index = response.rfind(f"```{last_match_content}```")
+            if last_match_index != -1:
+                thought = response[:last_match_index].strip()
+
+            extracted_text = last_match_content.lower()
+
+            if extracted_text in DIRECTION_MAP:
+                action_str = str(DIRECTION_MAP[extracted_text])
+            elif extracted_text.isdigit() and int(extracted_text) in DIRECTION_MAP.values():
+                action_str = str(int(extracted_text))
+
+        return thought, action_str
+
+    @property
+    def chat_completions(self) -> list[dict[str, str]]:
+        return self.messages
+
     @property
     def trajectory(self) -> Trajectory:
         return self._trajectory
-    
-    def reset(self):
-        """Reset agent state"""
+
+    def reset(self) -> None:
         self._trajectory = Trajectory()
-        self.multi_agent_context = {}
-    
-    def update_from_env(self, observation: Any, reward: float, done: bool, info: dict, **kwargs):
-        
-        actual_observation = observation
-        chain_context = None
-        if isinstance(observation, dict):
-            if "base_observation" in observation:
-                actual_observation = observation["base_observation"]
-            if "chain_context" in observation:
-                chain_context = observation["chain_context"]
-        
-        if chain_context:
-            self.multi_agent_context["chain_context"] = chain_context
-        
-        if not self._trajectory.steps or self._trajectory.steps[-1].done:
-            step = Step(observation=actual_observation, reward=reward, done=done, info=info)
-            self._trajectory.steps.append(step)
-        else:
-            current_step = self._trajectory.steps[-1]
-            current_step.observation = actual_observation
-            current_step.reward = reward
-            current_step.done = done
-            current_step.info.update(info)
-    
-    def update_from_model(self, response: str, **kwargs) -> Action:
-        if self._trajectory.steps:
-            current_step = self._trajectory.steps[-1]
-            current_step.model_response = response
-            current_step.action = self._parse_action(response)
-        
-        return Action(action=response)
-    
-    def get_current_state(self) -> Optional[Step]:
-        return self._trajectory.steps[-1] if self._trajectory.steps else None
-    
-    def _format_multi_agent_context(self) -> str:
-        if "chain_context" in self.multi_agent_context:
-            return f"CHAIN CONTEXT:\n{self.multi_agent_context['chain_context']}"
-        return ""
-    
-    def _parse_action(self, response: str) -> Any:
-        return response
+        self.messages = [
+            {
+                "role": "system",
+                "content": self.SYSTEM_PROMPT if not self.multistep_prompt else self.MULTI_SHOT_SYSTEM_PROMPT,
+            }
+        ]
+        self.step = 0

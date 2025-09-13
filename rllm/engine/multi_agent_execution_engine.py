@@ -57,13 +57,12 @@ class WorkflowPhase:
     The workflow is a Directed Acyclic Graph (DAG) of agents connected by connections.
     Please make sure to not introduce cyclic dependency between agents.
     
-    A phase is a collection of agents that execute together in a specific mode:
-    - Eg. Chain of Experts, each phase contains exactly one agent in a linear chain
-    - The phase defines how agents execute (sequential/parallel) and which agents participate
+    A phase contains exactly one agent that executes in this phase.
+    For Chain of Experts, each phase contains one agent in a linear chain.
     
     """
     phase_id: str
-    agent_ids: List[str]  
+    agent_id: str  # Single agent ID for this phase
     execution_mode: str = "sequential"
     description: Optional[str] = None 
 
@@ -118,7 +117,7 @@ class ChainOfExpertsWorkflow(BaseWorkflow):
         for i, config in enumerate(self.agent_configs_list):
             phases.append(WorkflowPhase(
                 phase_id=f"phase_{i}",
-                agent_ids=[config.agent_id],
+                agent_id=config.agent_id,
                 execution_mode="sequential",
                 description=f"Execute {config.role.value} agent: {config.agent_id}"
             ))
@@ -214,7 +213,6 @@ class MultiAgentExecutionEngine:
     
     async def run_workflow_trajectory_async(self, env_idx: int, application_id: str, seed: int = 0, mode: str = "Token", **kwargs) -> Dict[str, Any]:
         env = self.envs[env_idx]
-        trajectory = Trajectory()
         
         loop = asyncio.get_event_loop()
         observation, info = await loop.run_in_executor(None, env.reset)
@@ -232,14 +230,15 @@ class MultiAgentExecutionEngine:
         chat_completions = []
         completed_turns = 0
         
+        # Agent-level response tokens and masks tracking
+        agent_response_tokens = {}
+        agent_response_masks = {}
+        
         from rllm.agents.utils import convert_messages_to_tokens_and_masks
-        final_agent_id = self.phases[-1].agent_ids[0]
+        final_agent_id = self.phases[-1].agent_id
         engine = self.role_engines[final_agent_id]
         
         prompt_tokens = []
-        response_token_len = 0
-        response_tokens = []
-        response_masks = []
         termination_reason = None
         
         for step_idx in range(self.max_steps):
@@ -263,13 +262,16 @@ class MultiAgentExecutionEngine:
             step_start_response_len = response_token_len  # Track tokens added in this step
             
             for phase_idx, phase in enumerate(self.phases):
-                agent_id = phase.agent_ids[0]
+                agent_id = phase.agent_id
                 agent = agents[agent_id]
                 engine = self.role_engines[agent_id]
                 
-                self._inject_workflow_context(agent_id, phase_responses, agents)
+                upstream_response = self._get_upstream_phase_response(agent_id, phase_responses)
                 
-                prompt_msgs = agent.chat_completions
+                prompt_msgs = agent.chat_completions.copy()
+                
+                if upstream_response:
+                    prompt_msgs.append({"role": "user", "content": upstream_response})
                 
                 # Calculate remaining tokens for this phase
                 max_tokens = engine.max_response_length - response_token_len
@@ -282,6 +284,8 @@ class MultiAgentExecutionEngine:
                 )
                 
                 action = agent.update_from_model(response)
+                action = action.action 
+                
                 phase_responses[agent_id] = response
                 # Diagnostics: log generated token length per phase
                 try:
@@ -296,87 +300,45 @@ class MultiAgentExecutionEngine:
             
             if final_action:
                 observation, reward, done, info = await loop.run_in_executor(
-                    None, env.step, final_action.action
+                    None, env.step, final_action
                 )
                 # print(f"DEBUG: env_idx={env_idx}, step={step_idx}, action={final_action.action}, reward={reward}, done={done}")
-                total_reward += reward
+                total_reward = reward
                 # print(f"DEBUG: phase_responses={' '.join(phase_responses[final_agent_id].split()[:500])}{'...' if len(phase_responses[final_agent_id].split()) > 500 else ''}")
-                step = Step(
-                    observation=observation,
-                    model_response=phase_responses[final_agent_id],
-                    action=final_action.action,
-                    reward=reward,
-                    done=done,
-                    info=info.copy()
-                )
-                trajectory.steps.append(step)
                 
+                # Update final agent's trajectory with environment feedback
+                final_agent = agents[final_agent_id]
                 if observation:
                     obs_str = str(observation)
-
-                await self._synchronize_agent_histories_with_final_decision(
-                    step_idx, observation, final_action, phase_responses, agents
-                )
                 
-                # POST-STEP TOKENIZATION (like single-agent)
-                final_agent_id = self.phases[-1].agent_ids[0]
-                final_agent = agents[final_agent_id]
-                final_engine = self.role_engines[final_agent_id]
-                
-                from rllm.agents.utils import get_recent_assistant_user_messages
-                chat_completions_messages = final_agent.chat_completions
-                assistant_message, env_messages = get_recent_assistant_user_messages(chat_completions_messages)
-                
-                assert assistant_message is not None or mode != "Token", "Assistant messages is none when accumulating token trajectories which should be conversations. This should not happen."
-                assert env_messages is not None or mode != "Token", "Environment messages is none when accumulating token trajectories which should be conversations. This should not happen."
-                assistant_msg_tokens, assistant_msg_masks = [], []
-                env_msg_tokens, env_msg_masks = [], []
-                if assistant_message:
-                    assistant_msg_tokens, assistant_msg_masks = convert_messages_to_tokens_and_masks([assistant_message], tokenizer=final_engine.tokenizer, parser=final_engine.chat_parser, contains_first_msg=False, contains_generation_msg=False)
-                if env_messages:
-                    env_msg_tokens, env_msg_masks = convert_messages_to_tokens_and_masks(env_messages, tokenizer=final_engine.tokenizer, parser=final_engine.chat_parser, contains_first_msg=False, contains_generation_msg=True)
-
-                response_token_len += len(assistant_msg_tokens) + len(env_msg_tokens)
-                if response_token_len >= final_engine.max_response_length:
-                    # Truncation length 
-                    truncation_length = final_engine.max_response_length - response_token_len
-                    # Truncate the response and masks
-                    if truncation_length < 0:
-                        truncated_response_tokens = (assistant_msg_tokens + env_msg_tokens)[:truncation_length]
-                        truncated_response_masks = (assistant_msg_masks + env_msg_masks)[:truncation_length]
-                    else:
-                        # Edge case where the response is exactly the max response length (like single-agent)
-                        truncated_response_tokens = assistant_msg_tokens + env_msg_tokens
-                        truncated_response_masks = assistant_msg_masks + env_msg_masks
-                    # Update token collections (like single-agent)
-                    response_tokens.extend(truncated_response_tokens)
-                    response_masks.extend(truncated_response_masks)
+                # Process tokenization for each agent in the workflow
+                for agent_id, agent in agents.items():
+                    agent_tokens, agent_masks, agent_truncated = self._process_agent_tokenization(
+                        agent_id, agent, agents, mode
+                    )
                     
-                    # Log truncation details (like single-agent)
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.info(f"MULTI_AGENT_TRUNCATION: Final agent output truncated. Original length: {response_token_len}, Max allowed: {final_engine.max_response_length}, Truncated to: {len(truncated_response_tokens)}, Assistant msg tokens: {len(assistant_msg_tokens)}, Env msg tokens: {len(env_msg_tokens)}")
-
-                    # Apply reward penalty if assistant response was truncated (like single-agent)
-                    if response_token_len - len(env_msg_tokens) > final_engine.max_response_length:
+                    # Update agent-level response tokens and masks
+                    if agent_id not in agent_response_tokens:
+                        agent_response_tokens[agent_id] = []
+                        agent_response_masks[agent_id] = []
+                    
+                    agent_response_tokens[agent_id].extend(agent_tokens)
+                    agent_response_masks[agent_id].extend(agent_masks)
+                    
+                    # Check for truncation and apply penalties
+                    if agent_truncated:
                         total_reward = 0.0
-                    termination_reason = "TRUNCATION"
-                    # Handle returning
+                        termination_reason = "TRUNCATION"
+                        break
+                
+                if termination_reason == "TRUNCATION":
                     break
-
-                # Update the token version of trajectory (like single-agent)
-                response_tokens.extend(assistant_msg_tokens)
-                response_masks.extend(assistant_msg_masks)
 
                 if hasattr(final_agent, 'chat_completions'):
                     chat_completions = final_agent.chat_completions
                 
                 if done:
                     break
-                
-                # Add environment messages after done check
-                response_tokens.extend(env_msg_tokens)
-                response_masks.extend(env_msg_masks)
             completed_turns = completed_turns + 1
         
         if mode == "Token":
@@ -393,34 +355,43 @@ class MultiAgentExecutionEngine:
             except Exception:
                 pass
 
+            # Combine all agent response tokens and masks for final output
+            all_response_tokens = []
+            all_response_masks = []
+            for agent_id in self.phases:
+                if agent_id.agent_id in agent_response_tokens:
+                    all_response_tokens.extend(agent_response_tokens[agent_id.agent_id])
+                    all_response_masks.extend(agent_response_masks[agent_id.agent_id])
+            
             return {
                 "idx": env_idx,
                 "trajectory_reward": total_reward,
                 "prompt_tokens": torch.tensor(prompt_tokens, dtype=torch.long),     # Initial context (like single-agent)
-                "response_tokens": torch.tensor(response_tokens, dtype=torch.long),  # All workflow responses
-                "response_masks": torch.tensor(response_masks, dtype=torch.long),
+                "response_tokens": torch.tensor(all_response_tokens, dtype=torch.long),  # All workflow responses
+                "response_masks": torch.tensor(all_response_masks, dtype=torch.long),
                 "chat_completions": chat_completions,
                 "data_source": data_source,
                 "uid": uid,
                 "metrics": {
-                    "workflow_steps": len(trajectory.steps),
+                    "workflow_steps": len(agents[self.phases[-1].agent_id]._trajectory.steps),
                     "phases_executed": len(self.phases),
                     "total_reward": total_reward,
                     "completed_turns": completed_turns,
                     "prompt_tokens_length": len(prompt_tokens),
-                    "response_tokens_length": len(response_tokens),
-                    "response_masks_length": len(response_masks)
+                    "response_tokens_length": len(all_response_tokens),
+                    "response_masks_length": len(all_response_masks)
                 }
             }
         else:
             return {
                 "idx": env_idx,
-                "trajectory": trajectory,
+                "trajectory": agents[self.phases[-1].agent_id]._trajectory,
                 "total_reward": total_reward,
                 "chat_completions": chat_completions
             }
     
-    def _inject_workflow_context(self, current_agent_id: str, phase_responses: Dict[str, str], agents: Dict[str, BaseAgent]):
+    def _get_upstream_phase_response(self, current_agent_id: str, phase_responses: Dict[str, str]) -> str:
+        """Get upstream phase response as a string for injection into prompt"""
         context_parts = []
         
         for conn in self.connections:
@@ -428,44 +399,84 @@ class MultiAgentExecutionEngine:
                 previous_response = phase_responses[conn.from_agent]
                 context_parts.append(f"Input from {conn.from_agent.upper()}: {previous_response}")
         
-        if context_parts:
-            chain_context = "\n\n".join(context_parts)
-            current_agent = agents[current_agent_id]
-            if hasattr(current_agent, 'multi_agent_context'):
-                current_agent.multi_agent_context["chain_context"] = chain_context
+        return "\n\n".join(context_parts) if context_parts else ""
     
-    async def _synchronize_agent_histories_with_final_decision(self, step_idx: int, observation: Any, final_action: Action, phase_responses: Dict[str, str], agents: Dict[str, BaseAgent]):
+    def _process_agent_tokenization(self, agent_id: str, agent: BaseAgent, agents: Dict[str, BaseAgent], mode: str) -> Tuple[List[int], List[int], bool]:
         """
-        Synchronizes all agents to follow the same trajectory based on the final agent's decisions.
+        Process tokenization for a specific agent and return tokens, masks, and truncation status.
         
-        Ensures consistency between agents during updates.
-        Only manipulating state that won't break agent assumptions
-        """
-        final_agent_id = self.phases[-1].agent_ids[0]
-        final_agent = agents[final_agent_id]
-        
-        final_agent_messages = final_agent.messages
-        if len(final_agent_messages) >= 2 and final_agent_messages[-1]["role"] == "assistant":
-            final_reasoning = final_agent_messages[-1]["content"]
+        Args:
+            agent_id: ID of the agent to process
+            agent: The agent instance
+            agents: Dictionary of all agents
+            mode: Execution mode ("Token" or other)
             
-            for agent_id, agent in agents.items():
-                if agent_id != final_agent_id:
+        Returns:
+            Tuple of (tokens, masks, is_truncated)
+        """
+        from rllm.agents.utils import get_recent_assistant_user_messages, convert_messages_to_tokens_and_masks
+        
+        engine = self.role_engines[agent_id]
+        chat_completions_messages = agent.chat_completions
+        assistant_message, env_messages = get_recent_assistant_user_messages(chat_completions_messages)
+        
+        assert assistant_message is not None or mode != "Token", f"Assistant messages is none for agent {agent_id} when accumulating token trajectories which should be conversations. This should not happen."
+        assert env_messages is not None or mode != "Token", f"Environment messages is none for agent {agent_id} when accumulating token trajectories which should be conversations. This should not happen."
+        
+        assistant_msg_tokens, assistant_msg_masks = [], []
+        env_msg_tokens, env_msg_masks = [], []
+        
+        if assistant_message:
+            assistant_msg_tokens, assistant_msg_masks = convert_messages_to_tokens_and_masks(
+                [assistant_message], 
+                tokenizer=engine.tokenizer, 
+                parser=engine.chat_parser, 
+                contains_first_msg=False, 
+                contains_generation_msg=False
+            )
+        
+        if env_messages:
+            env_msg_tokens, env_msg_masks = convert_messages_to_tokens_and_masks(
+                env_messages, 
+                tokenizer=engine.tokenizer, 
+                parser=engine.chat_parser, 
+                contains_first_msg=False, 
+                contains_generation_msg=True
+            )
+        
+        # Combine assistant and environment tokens
+        combined_tokens = assistant_msg_tokens + env_msg_tokens
+        combined_masks = assistant_msg_masks + env_msg_masks
+        
+        # Check for truncation using agent's max response length
+        if len(combined_tokens) >= engine.max_response_length:
+            # Truncation length
+            truncation_length = engine.max_response_length
+            # Truncate the response and masks
+            if truncation_length < 0:
+                truncated_response_tokens = combined_tokens[:truncation_length]
+                truncated_response_masks = combined_masks[:truncation_length]
+            else:
+                # Edge case where the response is exactly the max response length
+                truncated_response_tokens = combined_tokens[:truncation_length]
+                truncated_response_masks = combined_masks[:truncation_length]
+            
+            # Log truncation details
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"MULTI_AGENT_TRUNCATION: Agent {agent_id} output truncated. Original length: {len(combined_tokens)}, Max allowed: {engine.max_response_length}, Truncated to: {len(truncated_response_tokens)}, Assistant msg tokens: {len(assistant_msg_tokens)}, Env msg tokens: {len(env_msg_tokens)}")
 
-                    if len(agent.messages) >= 2 and agent.messages[-1]["role"] == "assistant":
-                        old_response = agent.messages[-1]["content"]
-                        agent.messages[-1] = {
-                            "role": "assistant", 
-                            "content": final_reasoning
-                        }
-                    else:
-                        agent.messages.append({
-                            "role": "assistant", 
-                            "content": final_reasoning
-                        })
-                    
-                    old_step = agent.step
-                    agent.step = final_agent.step
+            # Apply reward penalty if assistant response was truncated
+            if len(assistant_msg_tokens) > engine.max_response_length:
+                # Set reward to 0 for this agent's current step
+                cur_step = agent.get_current_state()
+                if hasattr(cur_step, 'reward'):
+                    cur_step.reward = 0.0
             
+            return truncated_response_tokens, truncated_response_masks, True
+        
+        return combined_tokens, combined_masks, False
+                
     async def trajectory_generator(self, reset_seed=0, timing_raw=None, mode="Token", **kwargs):
         """Generate trajectories for all environments using workflow execution"""
         if timing_raw is None:
@@ -593,7 +604,7 @@ class MultiAgentExecutionEngine:
                 "workflow_type": self.workflow.workflow_id,
                 "batch_idx": token_result.get("idx", 0),
                 "agent_trajectories": {
-                    self.phases[-1].agent_ids[0]: {
+                    self.phases[-1].agent_id: {
                         "prompt_tokens": token_result.get("prompt_tokens", torch.empty(0, dtype=torch.long)),
                         "response_tokens": token_result.get("response_tokens", torch.empty(0, dtype=torch.long)),
                         "response_masks": token_result.get("response_masks", torch.empty(0, dtype=torch.long)),

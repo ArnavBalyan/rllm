@@ -14,61 +14,11 @@ from rllm.engine.multi_agent_execution_engine import (
     ChainOfExpertsWorkflow
 )
 from rllm.environments.frozenlake.frozenlake import FrozenLakeEnv
-from rllm.environments.multi_agent_env import MultiAgentEnv
 from rllm.trainer.verl.agent_ppo_trainer import AgentPPOTrainer
 from rllm.trainer.verl.multi_agent_ppo_trainer import (
     MultiAgentPPOTrainer,
     create_chain_of_experts_trainer
 )
-
-
-class FrozenLakeChainOfExpertsEnv(MultiAgentEnv):
-    """
-    FrozenLake environment Chain of Experts.
-    Inherits from MultiAgentEnv manages context between agents.
-    """
-    
-    def __init__(self, **kwargs):
-        self.base_env = FrozenLakeEnv(**kwargs)
-        super().__init__()
-    
-    def _create_observation(self):
-        obs, _ = self.base_env.reset()
-        return obs
-    
-    def _create_info(self):
-        _, info = self.base_env.reset()
-        return info
-    
-    def reset(self):
-        observation, info = self.base_env.reset()
-        self.multi_agent_context = {}
-        self.agent_history = []
-        return observation, info
-    
-    def reset_with_input(self, agent_input):
-        super().reset_with_input(agent_input)
-        observation, info = self.base_env.reset()
-        return observation, info
-    
-    def step(self, action):
-        return self.base_env.step(action)
-    
-    def render(self, *args, **kwargs):
-        return self.base_env.render(*args, **kwargs)
-    
-    def finished(self):
-        return self.base_env.finished()
-    
-    def success(self):
-        return self.base_env.success()
-    
-    @classmethod
-    def from_dict(cls, env_dict):
-        return cls(**env_dict)
-    
-    def __getattr__(self, name):
-        return getattr(self.base_env, name)
 
 
 def create_frozenlake_chain_of_experts_agents(config):
@@ -167,7 +117,7 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 
     if env_class is None:
-        env_class = FrozenLakeChainOfExpertsEnv
+        env_class = FrozenLakeEnv
     if agent_class is None:
         agent_class = FrozenLakeProposerAgent
 
@@ -232,7 +182,7 @@ def main(config: DictConfig):
     ray.get(train_frozenlake_chain_of_experts.remote(
         config, 
         agent_class=FrozenLakeProposerAgent, 
-        env_class=FrozenLakeChainOfExpertsEnv,
+        env_class=FrozenLakeEnv,
         agent_args={},
         env_args={}
     ))
