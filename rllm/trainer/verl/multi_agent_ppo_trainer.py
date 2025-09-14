@@ -101,7 +101,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             agent_id = agent_config.agent_id
             
             # Create separate resource pool for this agent
-            agent_resource_pool_spec = {f"{agent_id}_pool": [1]}  # 1 GPU per agent
+            agent_resource_pool_spec = {f"{agent_id}_pool": [2]}  # 2 GPUs per agent
             agent_mapping = {Role.ActorRollout: f"{agent_id}_pool"}
             agent_rpm = ResourcePoolManager(agent_resource_pool_spec, agent_mapping)
             agent_rpm.create_resource_pool()
@@ -265,13 +265,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             prompt_tokens = traj["prompt_tokens"]
             response_tokens = traj["response_tokens"]
             
-            # DEBUG: Log what we're getting from phase_data
-            print(f"🔍 TRAINER_DEBUG: agent={agent_id}")
-            print(f"  - prompt_tokens type: {type(prompt_tokens)}")
-            print(f"  - response_tokens type: {type(response_tokens)}")
-            print(f"  - prompt_tokens.numel(): {prompt_tokens.numel()}")
-            print(f"  - response_tokens.numel(): {response_tokens.numel()}")
-            print(f"  - traj keys: {list(traj.keys())}")
             
             assert prompt_tokens.numel() != 0 and response_tokens.numel() != 0, f"Both prompt {prompt_tokens.numel()} and response {response_tokens.numel()} of trajectory shouldn't be empty. Please check make sure environment is working and the config"
             all_initial_tokens_list.append(prompt_tokens)
@@ -404,33 +397,12 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         
                         local_batch = final_gen_batch_output[agent_id]
                         
-                        print(f"  batch_global.batch keys: {list(batch_global.batch.keys()) if batch_global.batch is not None else 'None'}")
-                        print(f"  local_batch.batch keys: {list(local_batch.batch.keys()) if local_batch.batch is not None else 'None'}")
-                        
-                        # Show overlapping keys and whether they're the same objects
-                        if batch_global.batch is not None and local_batch.batch is not None:
-                            global_keys = set(batch_global.batch.keys())
-                            local_keys = set(local_batch.batch.keys())
-                            overlap = global_keys & local_keys
-                            print(f"  Overlapping keys: {overlap}")
-                            
-                            for key in overlap:
-                                same_object = batch_global.batch[key] is local_batch.batch[key]
-                                same_values = torch.equal(batch_global.batch[key], local_batch.batch[key]) if hasattr(batch_global.batch[key], 'equal') else 'N/A'
-                                print(f"    {key}: same_object={same_object}, same_values={same_values}")
-                                                    
                         batch = type(batch_global)(
                             batch=batch_global.batch.clone(),
                             non_tensor_batch=deepcopy(batch_global.non_tensor_batch),
                             meta_info=deepcopy(batch_global.meta_info)
                         )
-                        
-                        try:
-                            batch = batch.union(local_batch)
-                            print(f"  ✅ Union successful for {agent_id}")
-                        except Exception as e:
-                            print(f"  ❌ Union failed for {agent_id}: {e}")
-                            raise
+                        batch = batch.union(local_batch)
                         # generate_metrics is a single dict of trajectory metrics, not per-agent
                         metrics_global[agent_id].update(generate_metrics)
                     

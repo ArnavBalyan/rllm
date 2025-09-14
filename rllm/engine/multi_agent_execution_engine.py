@@ -150,6 +150,8 @@ class MultiAgentExecutionEngine:
         # Per-environment agents: list indexed by env_idx, each a dict of role_id -> agent
         self.env_agents: List[Dict[str, BaseAgent]] = []
         
+        self.reward_mode = config.multi_agent.reward_mode
+        
         self.role_engines = self._init_role_engines(
             env_class, env_args, tokenizer, rollout_engine,
             config, trajectory_timeout, max_workers, engine_name, **kwargs
@@ -233,10 +235,12 @@ class MultiAgentExecutionEngine:
         agent_response_tokens = {}
         agent_response_masks = {}
         agent_chat_completions = {}
+        agent_matches = {}  # Track matches with final agent per step
         for phase in self.phases:
             agent_response_tokens[phase.agent_id] = []
             agent_response_masks[phase.agent_id] = []
             agent_chat_completions[phase.agent_id] = []
+            agent_matches[phase.agent_id] = 0
         
         from rllm.agents.utils import convert_messages_to_tokens_and_masks
         final_agent_id = self.phases[-1].agent_id
@@ -263,6 +267,8 @@ class MultiAgentExecutionEngine:
                 )
             
             phase_responses = {}
+            phase_actions = {}  # Track extracted actions from each agent
+            phase_upstream_contexts = {}  # Track upstream context sent to each agent for audit
             final_action = None
             step_start_response_len = response_token_len  # Track tokens added in this step
             
@@ -272,11 +278,13 @@ class MultiAgentExecutionEngine:
                 engine = self.role_engines[agent_id]
                 
                 upstream_response = self._get_upstream_phase_response(agent_id, phase_responses)
+                phase_upstream_contexts[agent_id] = upstream_response  # Store for audit
                 
                 prompt_msgs = agent.chat_completions.copy()
                 
-                if upstream_response:
-                    prompt_msgs.append({"role": "user", "content": upstream_response})
+                # UPSTREAM CONTEXT INJECTION: Add to model call only, don't modify agent state
+                upstream_msg = {"role": "user", "content": upstream_response}
+                prompt_msgs.append(upstream_msg)
                 
                 # Calculate remaining tokens for this phase
                 max_tokens = engine.max_response_length - response_token_len
@@ -289,16 +297,27 @@ class MultiAgentExecutionEngine:
                 )
                 
                 action = agent.update_from_model(response)
-                action = action.action 
+                action_str = action.action 
                 
                 phase_responses[agent_id] = response
+                phase_actions[agent_id] = action_str  # Store extracted action
                 # Diagnostics: log generated token length per phase
                 try:
                     gen_len = len(engine.tokenizer.encode(response, add_special_tokens=False))
-                    print(f"MA_PHASE_TOKENS step={step_idx} phase={phase_idx} agent={agent_id} gen_tokens={gen_len}", flush=True)
+                    print(f"MA_PHASE_TOKENS step={step_idx} phase={phase_idx} agent={agent_id} gen_tokens={gen_len} action={action_str}", flush=True)
                 except Exception:
                     pass
-                final_action = action
+                final_action = action_str
+            
+            # Track agent action matches with final agent (for contribution reward mode)
+            final_action_str = phase_actions[final_agent_id]
+                
+            for agent_id in phase_actions:
+                if agent_id != final_agent_id:
+                    agent_action_str = phase_actions[agent_id]
+                    if agent_action_str == final_action_str:
+                        agent_matches[agent_id] += 1
+                        print(f"MA_ACTION_MATCH step={step_idx} agent={agent_id} action={agent_action_str} matches_final={final_action_str}", flush=True)
             
             if termination_reason == "TRUNCATION":
                 break
@@ -331,7 +350,9 @@ class MultiAgentExecutionEngine:
                 # Always collect tokens and masks for all agents
                 agent_response_tokens[agent_id].extend(agent_tokens)
                 agent_response_masks[agent_id].extend(agent_masks)
-                agent_chat_completions[agent_id] = agent.chat_completions
+                audit_chat_completions = agent.chat_completions.copy()
+                audit_chat_completions.append({"role": "user", "content": phase_upstream_contexts[agent_id]})
+                agent_chat_completions[agent_id] = audit_chat_completions
                 
                 # Track if any agent was truncated
                 if agent_truncated:
@@ -368,11 +389,19 @@ class MultiAgentExecutionEngine:
             for phase in self.phases:
                 agent_id = phase.agent_id
                 if agent_id in agent_response_tokens:
+                    if self.reward_mode == "partial" and total_reward == 1.0 and completed_turns > 0:
+                        if agent_id == final_agent_id:
+                            agent_reward = total_reward
+                        else:
+                            agent_reward = agent_matches[agent_id] / completed_turns
+                    else:
+                        agent_reward = total_reward
+                    
                     phase_data[agent_id] = {
                         "response_tokens": torch.tensor(agent_response_tokens[agent_id], dtype=torch.long),
                         "response_masks": torch.tensor(agent_response_masks[agent_id], dtype=torch.long),
                         "prompt_tokens": torch.tensor(prompt_tokens, dtype=torch.long),  # Shared initial context
-                        "trajectory_reward": total_reward,  # Shared reward for now
+                        "trajectory_reward": agent_reward,
                         "phase_id": phase.phase_id,
                         "agent_role": phase.agent_id,
                         "chat_completions": agent_chat_completions[agent_id]
@@ -468,47 +497,23 @@ class MultiAgentExecutionEngine:
                 contains_generation_msg=True
             )
         
-        # DEBUG: Log token extraction results
-        print(f"🔍 AGENT_TOKENIZATION_DEBUG: agent={agent_id}")
-        print(f"  - assistant_message present: {assistant_message is not None}")
-        print(f"  - env_messages present: {env_messages is not None and len(env_messages) > 0}")
-        print(f"  - assistant_msg_tokens length: {len(assistant_msg_tokens)}")
-        print(f"  - env_msg_tokens length: {len(env_msg_tokens)}")
-        print(f"  - assistant_msg_masks length: {len(assistant_msg_masks)}")
-        print(f"  - env_msg_masks length: {len(env_msg_masks)}")
-        
         # Combine assistant and environment tokens
         combined_tokens = assistant_msg_tokens + env_msg_tokens
         combined_masks = assistant_msg_masks + env_msg_masks
-        
-        # DEBUG: Log combined token results
-        print(f"🔍 COMBINED_TOKENS_DEBUG: agent={agent_id}")
-        print(f"  - combined_tokens length: {len(combined_tokens)}")
-        print(f"  - combined_masks length: {len(combined_masks)}")
-        print(f"  - engine.max_response_length: {engine.max_response_length}")
         
         # Check for truncation using agent's max response length
         if len(combined_tokens) >= engine.max_response_length:
             # Truncation length (matching single agent calculation)
             truncation_length = engine.max_response_length - len(combined_tokens)
             
-            # DEBUG: Log truncation calculation
-            print(f"🚨 TRUNCATION_DEBUG: agent={agent_id}")
-            print(f"  - combined_tokens length: {len(combined_tokens)}")
-            print(f"  - max_response_length: {engine.max_response_length}")
-            print(f"  - truncation_length: {truncation_length}")
-            print(f"  - truncation_length < 0: {truncation_length < 0}")
-            
             # Truncate the response and masks
             if truncation_length < 0:
                 truncated_response_tokens = combined_tokens[:truncation_length]
                 truncated_response_masks = combined_masks[:truncation_length]
-                print(f"  - NEGATIVE truncation: took first {len(truncated_response_tokens)} tokens")
             else:
                 # Edge case where the response is exactly the max response length
                 truncated_response_tokens = combined_tokens
                 truncated_response_masks = combined_masks
-                print(f"  - NON-NEGATIVE truncation: took all {len(truncated_response_tokens)} tokens")
             
             # Log truncation details
             import logging
@@ -522,19 +527,7 @@ class MultiAgentExecutionEngine:
                 if hasattr(cur_step, 'reward'):
                     cur_step.reward = 0.0
             
-            # DEBUG: Log final truncated return values
-            print(f"🔍 FINAL_RETURN_DEBUG (TRUNCATED): agent={agent_id}")
-            print(f"  - returning truncated_response_tokens length: {len(truncated_response_tokens)}")
-            print(f"  - returning truncated_response_masks length: {len(truncated_response_masks)}")
-            print(f"  - returning truncation_flag: True")
-            
             return truncated_response_tokens, truncated_response_masks, True
-        
-        # DEBUG: Log final non-truncated return values
-        print(f"🔍 FINAL_RETURN_DEBUG (NO_TRUNCATION): agent={agent_id}")
-        print(f"  - returning combined_tokens length: {len(combined_tokens)}")
-        print(f"  - returning combined_masks length: {len(combined_masks)}")
-        print(f"  - returning truncation_flag: False")
         
         return combined_tokens, combined_masks, False
                 
@@ -562,11 +555,6 @@ class MultiAgentExecutionEngine:
         async def launch_workflow_trajectory(env_idx: int):
             try:
                 application_id = str(uuid.uuid4())
-                print(f"\n{'='*60}")
-                print(f"DEBUG: Starting workflow trajectory for env_idx={env_idx}")
-                print(f"  - Application ID: {application_id}")
-                print(f"{'='*60}\n")
-                
                 result = await self.run_workflow_trajectory_async(
                     env_idx=env_idx,
                     application_id=application_id,
@@ -575,11 +563,6 @@ class MultiAgentExecutionEngine:
                     **kwargs
                 )
                 
-                print(f"\n{'='*60}")
-                print(f"DEBUG: Completed workflow trajectory for env_idx={env_idx}")
-                print(f"  - Application ID: {application_id}")
-                print(f"  - Timestamp: {time.time()}")
-                print(f"{'='*60}\n")
                 
                 return result
             except Exception as e:
