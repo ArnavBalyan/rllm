@@ -245,6 +245,7 @@ class MultiAgentExecutionEngine:
         prompt_tokens = []
         termination_reason = None
         response_token_len = 0
+
         for step_idx in range(self.max_steps):
             
             for agent_id, agent in agents.items():
@@ -554,8 +555,9 @@ class MultiAgentExecutionEngine:
         # print(f"  - Max concurrency: {max_concurrency}")
         # print(f"{'='*60}\n")
         
-        # Wake up the rollout engine before starting trajectory generation
-        # self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.wake_up()
+        # Wake up all rollout engines before starting trajectory generation
+        for engine in self.role_engines.values():
+            engine.rollout_engine.wake_up()
                 
         async def launch_workflow_trajectory(env_idx: int):
             try:
@@ -611,11 +613,12 @@ class MultiAgentExecutionEngine:
                 print(f"Traj {idx}: {bar} ({steps} turns)")
             print(f"{'='*60}\n")
         
-        # Sleep the rollout engine after all trajectories are completed
-        # self.role_engines[list(self.role_engines.keys())[0]].rollout_engine.sleep()
+        # Sleep all rollout engines after completing all trajectories
+        for engine in self.role_engines.values():
+            engine.rollout_engine.sleep()
         # Add delay to ensure clean completion
-        # import time as ts_imp
-        # ts_imp.sleep(1)
+        import time as ts_imp
+        ts_imp.sleep(1)
         
         
     def execute_chain_of_experts_batch(

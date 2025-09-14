@@ -401,11 +401,38 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                             metrics_global[agent_id] = {}
 
                         print(f"Processing agent: {agent_id}")
-                        batch = batch_global.deepcopy()
                         
                         local_batch = final_gen_batch_output[agent_id]
-                        batch = batch.union(local_batch)
-                        metrics_global[agent_id].update(generate_metrics[agent_id])
+                        
+                        print(f"  batch_global.batch keys: {list(batch_global.batch.keys()) if batch_global.batch is not None else 'None'}")
+                        print(f"  local_batch.batch keys: {list(local_batch.batch.keys()) if local_batch.batch is not None else 'None'}")
+                        
+                        # Show overlapping keys and whether they're the same objects
+                        if batch_global.batch is not None and local_batch.batch is not None:
+                            global_keys = set(batch_global.batch.keys())
+                            local_keys = set(local_batch.batch.keys())
+                            overlap = global_keys & local_keys
+                            print(f"  Overlapping keys: {overlap}")
+                            
+                            for key in overlap:
+                                same_object = batch_global.batch[key] is local_batch.batch[key]
+                                same_values = torch.equal(batch_global.batch[key], local_batch.batch[key]) if hasattr(batch_global.batch[key], 'equal') else 'N/A'
+                                print(f"    {key}: same_object={same_object}, same_values={same_values}")
+                                                    
+                        batch = type(batch_global)(
+                            batch=batch_global.batch.clone(),
+                            non_tensor_batch=deepcopy(batch_global.non_tensor_batch),
+                            meta_info=deepcopy(batch_global.meta_info)
+                        )
+                        
+                        try:
+                            batch = batch.union(local_batch)
+                            print(f"  ✅ Union successful for {agent_id}")
+                        except Exception as e:
+                            print(f"  ❌ Union failed for {agent_id}: {e}")
+                            raise
+                        # generate_metrics is a single dict of trajectory metrics, not per-agent
+                        metrics_global[agent_id].update(generate_metrics)
                     
                         if self.use_critic:
                             with _timer("values", timing_raw):
