@@ -138,6 +138,7 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
         "training_mode": "final_agent",  
         "reward_aggregation": "final_agent",
         "train_all_agents": True,  # Enable independent agent training
+        "reward_mode": config.multi_agent.reward_mode
     }
     
     multi_agent_config = config.multi_agent

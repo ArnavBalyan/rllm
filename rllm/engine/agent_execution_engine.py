@@ -342,6 +342,8 @@ class AgentExecutionEngine:
 
             chat_completions_messages = agent.chat_completions
             assistant_message, env_messages = get_recent_assistant_user_messages(chat_completions_messages)
+            print("Printing assistant message for tokenization: ", assistant_message)
+            print("Printing env messages for tokenization: ", env_messages)
 
             # Check and convert to tokens if necessary
             assert assistant_message is not None or mode != "Token", "Assistant messages is none when accumulating token trajectories which should be conversations. This should not happen."

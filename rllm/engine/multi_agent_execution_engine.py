@@ -253,11 +253,14 @@ class MultiAgentExecutionEngine:
         for step_idx in range(self.max_steps):
             
             for agent_id, agent in agents.items():
+                if agent_id != final_agent_id:
+                    agent.reset()
                 agent.update_from_env(observation, 0.0, False, info)
             
             if step_idx == 0:
                 final_agent = agents[final_agent_id]
                 initial_messages = final_agent.chat_completions
+                print("Printing the initial messages for the final agent: ", initial_messages)
                 prompt_tokens, _ = convert_messages_to_tokens_and_masks(
                     initial_messages,
                     tokenizer=engine.tokenizer,
@@ -470,9 +473,9 @@ class MultiAgentExecutionEngine:
         from rllm.agents.utils import get_recent_assistant_user_messages, convert_messages_to_tokens_and_masks
         
         engine = self.role_engines[agent_id]
-        chat_completions_messages = agent.chat_completions
+        chat_completions_messages = agent.chat_completions.copy()
         assistant_message, env_messages = get_recent_assistant_user_messages(chat_completions_messages)
-        
+        print("Printing assistant message for tokenization: ", assistant_message)
         assert assistant_message is not None or mode != "Token", f"Assistant messages is none for agent {agent_id} when accumulating token trajectories which should be conversations. This should not happen."
         assert env_messages is not None or mode != "Token", f"Environment messages is none for agent {agent_id} when accumulating token trajectories which should be conversations. This should not happen."
         
