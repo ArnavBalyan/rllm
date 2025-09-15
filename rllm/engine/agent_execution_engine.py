@@ -239,6 +239,7 @@ class AgentExecutionEngine:
         response_token_len = 0
         response_tokens = []
         response_masks = []
+        response_text_log = []  # Track actual text being tokenized
         total_time = 0.0
         reward_time = None
         llm_time = 0.0
@@ -389,6 +390,9 @@ class AgentExecutionEngine:
             # Update the token version of trajectory
             response_tokens.extend(assistant_msg_tokens)
             response_masks.extend(assistant_msg_masks)
+            # Log the actual text being tokenized
+            if assistant_message:
+                response_text_log.append({"type": "assistant", "content": assistant_message.get("content", ""), "step": step_idx})
             observation = next_observation
 
             if total_time >= self.trajectory_timeout:
@@ -405,6 +409,10 @@ class AgentExecutionEngine:
 
             response_tokens.extend(env_msg_tokens)
             response_masks.extend(env_msg_masks)
+            # Log environment messages
+            if env_messages:
+                for env_msg in env_messages:
+                    response_text_log.append({"type": "environment", "content": env_msg.get("content", ""), "step": step_idx})
 
             if step_idx == self.max_steps - 1:
                 termination_reason = "MAX_STEPS"
@@ -460,6 +468,7 @@ class AgentExecutionEngine:
                 "trajectory_reward": trajectory.reward,
                 "idx": env.idx,
                 "chat_completions": agent.chat_completions,
+                "response_text_log": response_text_log,
                 "data_source": data_source,
                 "uid": uid,
                 "metrics": {

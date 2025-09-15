@@ -219,6 +219,23 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         
         agent_batches = {}
         metrics = {}
+        # Save multi-agent response text logs to understand tokenization
+        import os, json
+        save_dir = os.path.join(self.config.trainer.default_local_dir, "multi_agent_response_text_logs")
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, f"{getattr(self, 'global_steps', 0)}.jsonl"), "w") as f:
+            for traj in workflow_results:
+                if "phase_data" in traj:
+                    for agent_id, phase_info in traj["phase_data"].items():
+                        if "response_text_log" in phase_info:
+                            log_entry = {
+                                "idx": traj.get("idx", "unknown"), 
+                                "uid": traj.get("uid", "unknown"),
+                                "agent_id": agent_id,
+                                "response_text_log": phase_info["response_text_log"]
+                            }
+                            f.write(json.dumps(log_entry) + "\n")
+
         with _timer("transform_chain_of_experts_trajectories", timing_raw):
             agent_ids = [cfg.agent_id for cfg in self.workflow.agent_configs_list]
             

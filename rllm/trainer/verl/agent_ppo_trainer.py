@@ -541,6 +541,16 @@ class AgentPPOTrainer(RayPPOTrainer):
         # Sort trajectories by their idx, to ensure they are in order.
         trajectories.sort(key=lambda x: x["idx"])
 
+        # Save response text logs to understand tokenization
+        import os, json
+        save_dir = os.path.join(self.config.trainer.default_local_dir, "response_text_logs")
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, f"{getattr(self, 'global_steps', 0)}.jsonl"), "w") as f:
+            for traj in trajectories:
+                if "response_text_log" in traj:
+                    log_entry = {"idx": traj["idx"], "uid": traj.get("uid", "unknown"), "response_text_log": traj["response_text_log"]}
+                    f.write(json.dumps(log_entry) + "\n")
+
         with _timer("transform_trajectory", timing_raw):
             # Transform the raw trajectories into DataProto format.
             final_gen_batch_output, metrics = self._transform_agent_trajectories(trajectories)
