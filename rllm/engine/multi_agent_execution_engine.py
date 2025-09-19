@@ -290,7 +290,7 @@ class MultiAgentExecutionEngine:
                 agent.prepare_new_step()
                 
                 upstream_messages = self._get_upstream_phase_response(agent_id, phase_responses)
-                phase_upstream_contexts[agent_id] = upstream_messages 
+                phase_upstream_contexts[agent_id] = upstream_messages
                 
                 # UPSTREAM CONTEXT INJECTION: Add to agent's permanent message history for training
                 if upstream_messages:
@@ -300,9 +300,13 @@ class MultiAgentExecutionEngine:
                         agent.add_upstream_context(upstream_agent_id, upstream_response)
                 
                 prompt_msgs = agent.chat_completions.copy()
+                # print(f"DEBUG: traj{env_idx} step{step_idx} {agent_id} prompt_messages: {prompt_msgs}") 
                 
                 # Calculate remaining tokens for this phase
                 max_tokens = engine.max_response_length - response_token_len
+                
+                # HARDCODED DEBUG RESPONSE - COMMENT OUT FOR REAL TRAINING
+                # response = f" MODELs RESPONSE for traj{env_idx} step{step_idx} {agent_id}"
                 
                 response = await engine.get_model_response(
                     prompt_msgs, 
@@ -317,11 +321,11 @@ class MultiAgentExecutionEngine:
                 phase_responses[agent_id] = response
                 phase_actions[agent_id] = action_str  # Store extracted action
                 # Diagnostics: log generated token length per phase
-                try:
-                    gen_len = len(engine.tokenizer.encode(response, add_special_tokens=False))
-                    print(f"MA_PHASE_TOKENS step={step_idx} phase={phase_idx} agent={agent_id} gen_tokens={gen_len} action={action_str}", flush=True)
-                except Exception:
-                    pass
+                # try:
+                #     gen_len = len(engine.tokenizer.encode(response, add_special_tokens=False))
+                #     print(f"MA_PHASE_TOKENS step={step_idx} phase={phase_idx} agent={agent_id} gen_tokens={gen_len} action={action_str}", flush=True)
+                # except Exception:
+                #     pass
                 final_action = action_str
             
             # Track agent action matches with final agent (for contribution reward mode)

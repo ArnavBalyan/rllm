@@ -216,7 +216,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 timing_raw=timing_raw,
                 meta_info=meta_info
             )
-        
         agent_batches = {}
         metrics = {}
         # Save multi-agent response text logs to understand tokenization

@@ -228,7 +228,7 @@ Now it is your turn, please show your thinking process and put the final action 
         return Action(action=action_str)
 
     def add_upstream_context(self, agent_id: str, agent_response: str) -> None:        
-        upstream_msg = {"role": "user", "content": f"Input from {agent_id.upper()}: {agent_response}"}
+        upstream_msg = {"role": "assistant", "content": f"Input from {agent_id.upper()}: {agent_response}"}
         self.messages.append(upstream_msg)
 
     def _parse_model_response(self, response: str) -> tuple[str, str]:
