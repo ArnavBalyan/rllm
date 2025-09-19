@@ -147,7 +147,15 @@ Now it is your turn, please show your thinking process and put the final action 
         if self._trajectory.steps and self._trajectory.steps[-1].action is not None:  # Check if the last step has an action (meaning it's a completed step)
             last_step_obs_str = self._trajectory.steps[-1].observation
             if last_step_obs_str == current_obs_str:
-                user_prompt_content += "\nYour last response is invalid. Your position didn't change at all. You may need to recheck your thinking process, action outputted, and the format of response. Remember, you should only output the NEXT ACTION at each interation in the ``` ```. For example, if you want to move up, you should output ```Up```."
+                custom_message = kwargs.get("no_change_message")
+                is_final_agent = kwargs.get("is_final_agent", True)
+                
+                if custom_message:
+                    user_prompt_content += f"\n{custom_message}"
+                elif is_final_agent:
+                    user_prompt_content += "\nYour last response is invalid. Your position didn't change at all. You may need to recheck your thinking process, action outputted, and the format of response. Remember, you should only output the NEXT ACTION at each interation in the ``` ```. For example, if you want to move up, you should output ```Up```."
+                else:
+                    user_prompt_content += "\nYour response was considered and the downstream agent may have taken a different action. The position didn't change. Please provide your next recommendation."
 
         if self.max_steps is not None and self.max_steps - self.step > 0:
             user_prompt_content += f"\nThe maximum number of steps remaining is {self.max_steps - self.step}."
@@ -167,7 +175,14 @@ Now it is your turn, please show your thinking process and put the final action 
 
         thought, action_str = self._parse_model_response(content)
 
-        new_step = Step(chat_completions=copy.deepcopy(self.chat_completions), thought=thought, action=action_str, model_response=content, observation=self.current_observation)
+        new_step = Step(
+            chat_completions=copy.deepcopy(self.chat_completions), 
+            thought=thought, 
+            action=action_str, 
+            model_response=content, 
+            observation=self.current_observation,
+            upstream_context={}  
+        )
         self._trajectory.steps.append(new_step)
 
         self.messages.append({"role": "assistant", "content": content})
@@ -175,6 +190,46 @@ Now it is your turn, please show your thinking process and put the final action 
         self.step += 1
 
         return Action(action=action_str)
+
+    def prepare_new_step(self) -> Step:
+        """Create an empty step and add it to trajectory"""
+        new_step = Step(
+            chat_completions=copy.deepcopy(self.chat_completions), 
+            thought="", 
+            action=None, 
+            model_response="", 
+            observation=self.current_observation,
+            upstream_context={}  
+        )
+        self._trajectory.steps.append(new_step)
+        return new_step
+
+    def complete_step_with_model_response(self, response: str, **kwargs) -> Action:
+        """Populate the current step with model response"""
+        content = response
+
+        if not self.accumulate_thinking:
+            _, sep, after = content.partition("</think>")
+            if sep:
+                content = after
+
+        thought, action_str = self._parse_model_response(content)
+        
+        # Populate the last step (should be the empty one created by prepare_new_step)
+        current_step = self._trajectory.steps[-1]
+        current_step.thought = thought
+        current_step.action = action_str
+        current_step.model_response = content
+        current_step.chat_completions = copy.deepcopy(self.chat_completions)
+
+        self.messages.append({"role": "assistant", "content": content})
+        self.step += 1
+
+        return Action(action=action_str)
+
+    def add_upstream_context(self, agent_id: str, agent_response: str) -> None:        
+        upstream_msg = {"role": "user", "content": f"Input from {agent_id.upper()}: {agent_response}"}
+        self.messages.append(upstream_msg)
 
     def _parse_model_response(self, response: str) -> tuple[str, str]:
         DIRECTION_MAP = {"left": 1, "down": 2, "right": 3, "up": 4}

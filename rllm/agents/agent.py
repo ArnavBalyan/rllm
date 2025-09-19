@@ -12,6 +12,7 @@ class Step:
     observation: Any = None
     model_response: str = ""
     info: dict = field(default_factory=dict)  # Store any additional info.
+    upstream_context: dict[str, str] = field(default_factory=dict)  # Multi-agent upstream context: agent_id -> response
 
     # field below are filled by the engine
     reward: float = 0.0

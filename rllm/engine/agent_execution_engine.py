@@ -245,6 +245,8 @@ class AgentExecutionEngine:
         llm_time = 0.0
         env_time = 0.0
         reward = 0.0
+        temp_assistant_message = []
+        temp_env_messages = []
 
         # for step return
         episode_steps = []
@@ -265,6 +267,8 @@ class AgentExecutionEngine:
         )
         messages = agent.chat_completions
         prompt_tokens, _ = convert_messages_to_tokens_and_masks(messages, tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=True, contains_generation_msg=True)
+        temp_assistant_message.append(messages.copy())  # Make a copy to capture the state at this point
+        temp_assistant_message.append("Dummy message 271")
         prompt_token_len = len(prompt_tokens)
         # Note, this should never happen!
         if prompt_token_len > self.max_prompt_length:
@@ -353,8 +357,11 @@ class AgentExecutionEngine:
             env_msg_tokens, env_msg_masks = [], []
             if assistant_message:
                 assistant_msg_tokens, assistant_msg_masks = convert_messages_to_tokens_and_masks([assistant_message], tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=False, contains_generation_msg=False)
+                temp_assistant_message.append("Dummy message 360")
+                temp_assistant_message.append([assistant_message])
             if env_messages:
                 env_msg_tokens, env_msg_masks = convert_messages_to_tokens_and_masks(env_messages, tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=False, contains_generation_msg=True)
+                temp_env_messages.append(env_messages)
 
             # Update repsonse token length
             response_token_len += len(assistant_msg_tokens) + len(env_msg_tokens)
@@ -448,6 +455,20 @@ class AgentExecutionEngine:
         # Aggregate final trajectory statistics
         compute_trajectory_reward(trajectory)
         compute_mc_return(trajectory, gamma=self.gamma)
+        
+        # Simple print of conversation flow
+        summary = f"\n=== TRAJECTORY {idx} SUMMARY ===\n"
+        summary += f"Assistant messages: {len(temp_assistant_message)} steps\n"
+        for i, msgs in enumerate(temp_assistant_message):
+            summary += f"Printing Message number {i}: {len(msgs)} messages\n"
+            summary += f"{msgs}\n"
+        
+        summary += f"Environment messages: {len(temp_env_messages)} steps\n"
+        for i, msgs in enumerate(temp_env_messages):
+            summary += f"Printing Message number {i}: {len(msgs)} env messages\n"
+            summary += f"{msgs}\n"
+        summary += f"=== END TRAJECTORY {idx} ===\n"
+        print(summary)
 
         if mode == "Text":
             return trajectory

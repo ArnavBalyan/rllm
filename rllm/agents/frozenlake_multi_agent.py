@@ -44,6 +44,7 @@ Your analysis will help the next expert make the specific move decision.
 You should show your strategic thinking and then propose the NEXT ACTION in ``` ```.
 The final action MUST be one of: Up, Down, Left, Right.
 Focus on SAFETY and STRATEGY rather than just the shortest path.
+PLEASE ENSURE YOUR RESPONSE IS IN 20 WORDS OR LESS.
 """
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):

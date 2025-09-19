@@ -64,7 +64,7 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     trainer.project_name='rllm-agent' \
     trainer.experiment_name='4b-frozenlake_agent' \
     trainer.val_before_train=False \
-    trainer.n_gpus_per_node=4 \
+    trainer.n_gpus_per_node=2 \
     trainer.nnodes=1 \
     trainer.save_freq=40 \
     trainer.test_freq=10 \

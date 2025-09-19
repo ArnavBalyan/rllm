@@ -18,7 +18,7 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     data.max_response_length=1024 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
     data.val_files=${RLLM_DIR}/data/rllm-frozenlake/test.parquet \
-    actor_rollout_ref.model.path=Qwen/Qwen3-4B \
+    actor_rollout_ref.model.path=Qwen/Qwen2-0.5B \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -63,7 +63,7 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     trainer.project_name='rllm-chain-of-experts' \
     trainer.experiment_name='frozenlake-chain-of-experts-production-6k-4B-production' \
     trainer.val_before_train=False \
-    trainer.n_gpus_per_node=4 \
+    trainer.n_gpus_per_node=2 \
     trainer.nnodes=1 \
     trainer.save_freq=100000 \
     +multi_agent.training_mode=final_agent \

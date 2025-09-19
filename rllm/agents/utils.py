@@ -35,6 +35,41 @@ def get_recent_assistant_user_messages(chat_completions_messages):
     return assistant_message, env_messages
 
 
+def get_recent_assistant_messages_list(chat_completions_messages, num_assistant_messages):
+    """
+    Extracts multiple recent assistant messages and environment messages from a chat completions list.
+
+    Args:
+        chat_completions_messages (List[Dict]): List of message dictionaries from chat completions.
+        num_assistant_messages (int): Number of recent assistant messages to extract.
+
+    Returns:
+        Tuple[List[Dict], List[Dict]]: A tuple containing:
+            - A list of recent assistant messages in chronological order
+            - A list of environment messages (user/tool) that occurred after the oldest assistant message
+    """
+    env_messages = []
+    assistant_messages = []
+    seen_assistant_count = 0
+    
+    for message in reversed(chat_completions_messages):
+        role = message.get("role", None)
+        if role == "assistant":
+            if seen_assistant_count < num_assistant_messages:
+                assistant_messages.append(message)
+                seen_assistant_count += 1
+            else:
+                break
+        elif role in ["user", "tool"] and seen_assistant_count == 0:
+            env_messages.append(message)
+    
+    # Reverse to maintain chronological order
+    env_messages = list(reversed(env_messages))
+    assistant_messages = list(reversed(assistant_messages))
+    
+    return assistant_messages, env_messages
+
+
 def convert_messages_to_tokens_and_masks(messages: list[dict[str, str]], tokenizer: PreTrainedTokenizerBase, parser: ChatTemplateParser, contains_first_msg=False, contains_generation_msg=False):
     """
     Converts multiple messages to tokens and masks.

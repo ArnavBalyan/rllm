@@ -101,7 +101,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             agent_id = agent_config.agent_id
             
             # Create separate resource pool for this agent
-            agent_resource_pool_spec = {f"{agent_id}_pool": [2]}  # 2 GPUs per agent
+            agent_resource_pool_spec = {f"{agent_id}_pool": [1]}  # 2 GPUs per agent
             agent_mapping = {Role.ActorRollout: f"{agent_id}_pool"}
             agent_rpm = ResourcePoolManager(agent_resource_pool_spec, agent_mapping)
             agent_rpm.create_resource_pool()
