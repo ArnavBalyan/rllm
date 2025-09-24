@@ -232,6 +232,7 @@ class MultiAgentExecutionEngine:
         agent_response_masks = {}
         agent_response_text_logs = {}  # Simplified: empty text logs
         agent_matches = {}  # Track matches with final agent per step
+        agent_response_token_len = {}  # Track accumulated tokens per agent
         temp_assistant_messages = {}  # Track assistant messages for pretty printing
         temp_env_messages = {}  # Track env messages for pretty printing
         from rllm.agents.utils import convert_messages_to_tokens_and_masks
@@ -244,6 +245,7 @@ class MultiAgentExecutionEngine:
             agent_response_masks[phase.agent_id] = []
             agent_response_text_logs[phase.agent_id] = []
             agent_matches[phase.agent_id] = 0
+            agent_response_token_len[phase.agent_id] = 0
             temp_assistant_messages[phase.agent_id] = []
             temp_env_messages[phase.agent_id] = []
             
@@ -252,7 +254,7 @@ class MultiAgentExecutionEngine:
             agent = agents[agent_id]
             phase_engine = self.role_engines[agent_id]
             agent.reset()
-            colorful_print(f"🔄 Reset {agent_id}", "yellow")
+            # colorful_print(f"🔄 Reset {agent_id}", "yellow")  # Removed for performance
             
             agent.update_from_env(observation, 0.0, False, info)
             
@@ -300,17 +302,39 @@ class MultiAgentExecutionEngine:
                         agent.add_upstream_context(upstream_agent_id, upstream_response)
                 
                 prompt_msgs = agent.chat_completions.copy()
-                # print(f"DEBUG: traj{env_idx} step{step_idx} {agent_id} prompt_messages: {prompt_msgs}") 
-                
-                # Calculate remaining tokens for this phase
-                max_tokens = engine.max_response_length - response_token_len
+                max_tokens = engine.max_response_length - agent_response_token_len[agent_id]
                 
                 # HARDCODED DEBUG RESPONSE - COMMENT OUT FOR REAL TRAINING
                 # response = f" MODELs RESPONSE for traj{env_idx} step{step_idx} {agent_id}"
                 
+                # Stream prompt messages to file for debugging/monitoring
+                import json
+                import os
+                prompt_log_entry = {
+                    "traj_id": env_idx,
+                    "step_id": step_idx,
+                    "agent_id": agent_id,
+                    "phase_idx": phase_idx,
+                    "application_id": application_id,
+                    "raw_content_sent_to_engine": prompt_msgs,
+                    "max_tokens": max_tokens
+                }
+                
+                # Create logs directory if it doesn't exist
+                log_dir = "/workspace/model_response_logs"
+                os.makedirs(log_dir, exist_ok=True)
+                log_file = os.path.join(log_dir, "prompt_stream.jsonl")
+                
+                # Append to JSONL file
+                with open(log_file, "a") as f:
+                    f.write(json.dumps(prompt_log_entry) + "\n")
+                
                 response = await engine.get_model_response(
                     prompt_msgs, 
                     application_id, 
+                    traj_id=env_idx,
+                    step_id=step_idx,
+                    agent_id=agent_id,
                     max_tokens=max_tokens,
                     **engine.sampling_params
                 )
@@ -336,7 +360,7 @@ class MultiAgentExecutionEngine:
                     agent_action_str = phase_actions[agent_id]
                     if agent_action_str == final_action_str:
                         agent_matches[agent_id] += 1
-                        print(f"MA_ACTION_MATCH step={step_idx} agent={agent_id} action={agent_action_str} matches_final={final_action_str}", flush=True)
+                        # print(f"MA_ACTION_MATCH step={step_idx} agent={agent_id} action={agent_action_str} matches_final={final_action_str}", flush=True)  # Removed for performance
             
             if termination_reason == "TRUNCATION":
                 break
@@ -366,18 +390,20 @@ class MultiAgentExecutionEngine:
                 obs_str = str(observation)
             
             # Process tokenization for each agent in the workflow
-            print(f"🔄 TOKENIZATION_LOOP: Processing {len(agents)} agents: {list(agents.keys())}")
+            # print(f"🔄 TOKENIZATION_LOOP: Processing {len(agents)} agents: {list(agents.keys())}")  # Removed for performance
             
             any_agent_truncated = False
             for phase_idx, phase in enumerate(self.phases):
                 agent_id = phase.agent_id
                 agent = agents[agent_id]
-                print(f"🔄 PROCESSING_AGENT: {agent_id} (phase {phase_idx})")
                 agent_tokens, agent_masks, agent_truncated, agent_text_logs = self._process_agent_tokenization(
-                    agent_id, agent, agents, mode, step_idx, phase_idx, temp_assistant_messages[agent_id], temp_env_messages[agent_id]
+                    agent_id, agent, agents, mode, step_idx, phase_idx, temp_assistant_messages[agent_id], temp_env_messages[agent_id], agent_response_token_len[agent_id]
                 )
                 
-                print(f"🔄 AGENT_RESULT: {agent_id} returned {len(agent_tokens)} tokens, {len(agent_masks)} masks, truncated={agent_truncated}")
+                # Update agent's accumulated token count
+                agent_response_token_len[agent_id] += len(agent_tokens)
+                
+                # print(f"🔄 AGENT_RESULT: {agent_id} returned {len(agent_tokens)} tokens, {len(agent_masks)} masks, truncated={agent_truncated}")  # Removed for performance
                 
                 # Always collect tokens and masks for all agents
                 agent_response_tokens[agent_id].extend(agent_tokens)
@@ -400,20 +426,21 @@ class MultiAgentExecutionEngine:
                 break
             completed_turns = completed_turns + 1
         
-        # Pretty print conversation flow for each agent
-        for agent_id in temp_assistant_messages:
-            summary = f"\n=== AGENT {agent_id} TRAJECTORY {env_idx} SUMMARY ===\n"
-            summary += f"Assistant messages: {len(temp_assistant_messages[agent_id])} steps\n"
-            for i, msgs in enumerate(temp_assistant_messages[agent_id]):
-                summary += f"Printing Message number {i}: {len(msgs)} messages\n"
-                summary += f"{msgs}\n"
-            
-            summary += f"Environment messages: {len(temp_env_messages[agent_id])} steps\n"
-            for i, msgs in enumerate(temp_env_messages[agent_id]):
-                summary += f"Printing Message number {i}: 1 env messages\n"
-                summary += f"[{msgs}]\n"
-            summary += f"=== END AGENT {agent_id} TRAJECTORY {env_idx} ===\n"
-            print(summary)
+        # # Pretty print conversation flow for each agent (every 5th step only)
+        # if completed_turns % 5 == 0 or completed_turns == 0:  # Log every 5th step or at start
+        #     for agent_id in temp_assistant_messages:
+        #         summary = f"\n=== AGENT {agent_id} TRAJECTORY {env_idx} SUMMARY (Step {completed_turns}) ===\n"
+        #         summary += f"Assistant messages: {len(temp_assistant_messages[agent_id])} steps\n"
+        #         for i, msgs in enumerate(temp_assistant_messages[agent_id]):
+        #             summary += f"Printing Message number {i}: {len(msgs)} messages\n"
+        #             summary += f"{msgs}\n"
+                
+        #         summary += f"Environment messages: {len(temp_env_messages[agent_id])} steps\n"
+        #         for i, msgs in enumerate(temp_env_messages[agent_id]):
+        #             summary += f"Printing Message number {i}: 1 env messages\n"
+        #             summary += f"[{msgs}]\n"
+        #         summary += f"=== END AGENT {agent_id} TRAJECTORY {env_idx} ===\n"
+        #         print(summary)
         
         if mode == "Token":
             # Derive optional metadata for downstream consumers
@@ -435,10 +462,11 @@ class MultiAgentExecutionEngine:
                 agent_id = phase.agent_id
                 if agent_id in agent_response_tokens:
                     if self.reward_mode == "partial" and total_reward == 1.0 and completed_turns > 0:
-                        if agent_id == final_agent_id:
-                            agent_reward = total_reward
-                        else:
-                            agent_reward = agent_matches[agent_id] / completed_turns
+                        agent_reward = total_reward
+                        # if agent_id == final_agent_id:
+                        #     agent_reward = total_reward
+                        # else:
+                        #     agent_reward = agent_matches[agent_id] / completed_turns
                     else:
                         agent_reward = total_reward
                     
@@ -461,6 +489,46 @@ class MultiAgentExecutionEngine:
                     all_response_tokens.extend(agent_response_tokens[agent_id])
                     all_response_masks.extend(agent_response_masks[agent_id])
             
+            # Print trajectory summary with final token counts
+            bar = "█" * (completed_turns)
+            token_info = ""
+            agent_tokens = []
+            for agent_id in agents.keys():
+                if agent_id in agent_response_token_len:
+                    response_tokens = agent_response_token_len[agent_id]
+                    prompt_tokens = len(phase_prompt_tokens[agent_id])
+                    total_tokens = response_tokens + prompt_tokens
+                    agent_tokens.append(f"{agent_id}:{total_tokens}t")
+            token_info = f" [{', '.join(agent_tokens)}]"
+            print(f"Trajectory {env_idx} Complete: {bar} ({completed_turns} turns){token_info}")
+            
+            # Stream collected tokenization messages for this multi-agent trajectory
+            import json
+            import os
+            tokenization_log_entry = {
+                "traj_id": env_idx,
+                "application_id": application_id,
+                "agent_tokenization_messages": {
+                    agent_id: {
+                        "temp_assistant_messages": temp_assistant_messages[agent_id],
+                        "temp_env_messages": temp_env_messages[agent_id]
+                    } for agent_id in temp_assistant_messages
+                },
+                "trajectory_reward": total_reward,
+                "total_steps": completed_turns,
+                "phases_executed": len(self.phases),
+                "timestamp": time.time()
+            }
+            
+            # Create logs directory if it doesn't exist
+            log_dir = "/workspace/model_response_logs"
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, "multi_agent_tokenization_messages.jsonl")
+            
+            # Append to JSONL file
+            with open(log_file, "a") as f:
+                f.write(json.dumps(tokenization_log_entry) + "\n")
+
             return {
                 "idx": env_idx,
                 "trajectory_reward": total_reward,
@@ -503,7 +571,7 @@ class MultiAgentExecutionEngine:
         
         return upstream_messages
     
-    def _process_agent_tokenization(self, agent_id: str, agent: BaseAgent, agents: Dict[str, BaseAgent], mode: str, step_idx: int = 0, phase_idx: int = 0, temp_assistant_messages: List = None, temp_env_messages: List = None) -> Tuple[List[int], List[int], bool, List[dict]]:
+    def _process_agent_tokenization(self, agent_id: str, agent: BaseAgent, agents: Dict[str, BaseAgent], mode: str, step_idx: int = 0, phase_idx: int = 0, temp_assistant_messages: List = None, temp_env_messages: List = None, current_response_token_len: int = 0) -> Tuple[List[int], List[int], bool, List[dict]]:
         """
         Process tokenization for a specific agent and return tokens, masks, truncation status, and text logs.
         
@@ -524,11 +592,10 @@ class MultiAgentExecutionEngine:
         # Get recent assistant messages based on agent's position in chain (phase_idx + 1)
         agent_position = phase_idx + 1
         assistant_messages, env_messages = get_recent_assistant_messages_list(chat_completions_messages, agent_position)
-        # print("Printing assistant message for tokenization: ", assistant_message)
         
         # Track messages for pretty printing (matching single agent pattern)
         if temp_assistant_messages is not None and assistant_messages:
-            temp_assistant_messages.append(f"Dummy message for agent {agent_id} step {step_idx}")
+            temp_assistant_messages.append("Custom Log representing message break between steps")
             temp_assistant_messages.append(assistant_messages)
         if temp_env_messages is not None and env_messages:
             temp_env_messages.extend(env_messages)
@@ -560,32 +627,22 @@ class MultiAgentExecutionEngine:
         combined_tokens = assistant_msg_tokens + env_msg_tokens
         combined_masks = assistant_msg_masks + env_msg_masks
         
-        # Simplified: no text logging needed
         text_logs = []
         
-        # Check for truncation using agent's max response length
-        if len(combined_tokens) >= engine.max_response_length:
-            # Truncation length (matching single agent calculation)
-            truncation_length = engine.max_response_length - len(combined_tokens)
+        new_total_len = current_response_token_len + len(combined_tokens)
+        if new_total_len >= engine.max_response_length:
+            truncation_length = engine.max_response_length - current_response_token_len
             
-            # Truncate the response and masks
             if truncation_length < 0:
                 truncated_response_tokens = combined_tokens[:truncation_length]
                 truncated_response_masks = combined_masks[:truncation_length]
             else:
-                # Edge case where the response is exactly the max response length
                 truncated_response_tokens = combined_tokens
                 truncated_response_masks = combined_masks
             
-            # Log truncation details
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"MULTI_AGENT_TRUNCATION: Agent {agent_id} output truncated. Original length: {len(combined_tokens)}, Max allowed: {engine.max_response_length}, Truncated to: {len(truncated_response_tokens)}, Assistant msg tokens: {len(assistant_msg_tokens)}, Env msg tokens: {len(env_msg_tokens)}")
-
-            # Apply reward penalty if assistant response was truncated (matching single agent logic)
-            if len(combined_tokens) - len(env_msg_tokens) > engine.max_response_length:
-                # Set reward to 0 for this agent's current step
-                cur_step = agent.get_current_state()
+            # Apply reward penalty only if assistant tokens exceed limit
+            cur_step = agent.get_current_state()
+            if current_response_token_len + len(assistant_msg_tokens) > engine.max_response_length:
                 if hasattr(cur_step, 'reward'):
                     cur_step.reward = 0.0
             
@@ -647,15 +704,10 @@ class MultiAgentExecutionEngine:
             except Exception as e:
                 raise e
         
-        # Visualize trajectory turns at the end using metrics from completed_trajectories
+        # Simple trajectory completion summary (token details shown per step above)
         if completed_trajectories:
             print(f"\n{'='*60}")
-            print("TRAJECTORY TURNS SUMMARY:")
-            print(f"{'='*60}")
-            for idx, traj in enumerate(completed_trajectories):
-                steps = traj["metrics"]["steps"]
-                bar = "█" * steps
-                print(f"Traj {idx}: {bar} ({steps} turns)")
+            print(f"COMPLETED {len(completed_trajectories)} TRAJECTORIES")
             print(f"{'='*60}\n")
         
         # Sleep all rollout engines after completing all trajectories

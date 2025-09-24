@@ -101,7 +101,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             agent_id = agent_config.agent_id
             
             # Create separate resource pool for this agent
-            agent_resource_pool_spec = {f"{agent_id}_pool": [1]}  # 2 GPUs per agent
+            agent_resource_pool_spec = {f"{agent_id}_pool": [4]}  # 2 GPUs per agent
             agent_mapping = {Role.ActorRollout: f"{agent_id}_pool"}
             agent_rpm = ResourcePoolManager(agent_resource_pool_spec, agent_mapping)
             agent_rpm.create_resource_pool()
@@ -216,6 +216,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 timing_raw=timing_raw,
                 meta_info=meta_info
             )
+            # raise Exception("Stopping here")
         agent_batches = {}
         metrics = {}
         # Save multi-agent response text logs to understand tokenization
@@ -515,7 +516,19 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 metrics_global.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics_global.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
                 
-                logger.log(data=metrics_global, step=self.global_steps)
+                # Flatten metrics for wandb - convert nested agent metrics to flat structure
+                flattened_metrics = {}
+                for key, value in metrics_global.items():
+                    if isinstance(value, dict):
+                        # This is an agent's metrics, flatten with agent prefix
+                        for metric_name, metric_value in value.items():
+                            flattened_metrics[f"{key}/{metric_name}"] = metric_value
+                    else:
+                        # This is a top-level metric
+                        flattened_metrics[key] = value
+                
+                print(f"[DEBUG] Logging {len(flattened_metrics)} metrics to wandb: {list(flattened_metrics.keys())[:5]}...")
+                logger.log(data=flattened_metrics, step=self.global_steps)
                 self.global_steps += 1
                 
                 if self.global_steps >= self.total_training_steps:

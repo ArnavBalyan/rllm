@@ -17,8 +17,8 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 python3 -m examples.frozenlake.train_frozenlake_agent \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=2 \
-    data.val_batch_size=2 \
+    data.train_batch_size=4 \
+    data.val_batch_size=4 \
     data.max_prompt_length=4096 \
     data.max_response_length=2096 \
     actor_rollout_ref.model.path=Qwen/Qwen3-4B \
@@ -47,8 +47,8 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.temperature=0.7 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
-    actor_rollout_ref.rollout.n=2 \
-    actor_rollout_ref.rollout.val_kwargs.n=2 \
+    actor_rollout_ref.rollout.n=1 \
+    actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.temperature=0.7 \
     actor_rollout_ref.rollout.val_kwargs.top_p=0.8 \
     actor_rollout_ref.rollout.val_kwargs.top_k=20 \
@@ -61,12 +61,12 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     algorithm.clip_advantages=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='rllm-agent' \
-    trainer.experiment_name='4b-frozenlake_agent' \
+    trainer.project_name='rllm-agent-trash' \
+    trainer.experiment_name='4b-frozenlake_agent-trash' \
     trainer.val_before_train=False \
-    trainer.n_gpus_per_node=2 \
+    trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
-    trainer.save_freq=40 \
+    trainer.save_freq=1000000s \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=/opt/dlami/nvme/checkpoints \

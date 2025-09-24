@@ -115,7 +115,7 @@ class AgentExecutionEngine:
         else:
             self.chat_parser = chat_parser
 
-    async def get_model_response(self, prompt, application_id, **kwargs):
+    async def get_model_response(self, prompt, application_id, traj_id=None, step_id=None, agent_id=None, **kwargs):
         """
         Compute model response asynchronously based on the engine type.
 
@@ -125,6 +125,9 @@ class AgentExecutionEngine:
         Args:
             prompt: The input prompt to send to the model
             application_id: Unique identifier for the application
+            traj_id: Trajectory ID for logging
+            step_id: Step ID for logging
+            agent_id: Agent ID for logging
             **kwargs: Additional arguments to pass to the model
 
         Returns:
@@ -136,7 +139,14 @@ class AgentExecutionEngine:
         if self.engine_name == "openai":
             return await self._get_openai_async(prompt, application_id, **kwargs)
         elif self.engine_name == "verl":
-            return await self._get_verl_async(prompt, application_id, **kwargs)
+            return await self._get_verl_async(
+                prompt, 
+                application_id, 
+                traj_id=traj_id, 
+                step_id=step_id, 
+                agent_id=agent_id, 
+                **kwargs
+            )
         else:
             raise NotImplementedError(f"Engine type '{self.engine_name}' not supported")
 
@@ -156,14 +166,21 @@ class AgentExecutionEngine:
         self.agents = agents
         self.n_parallel_agents = len(envs)
 
-    async def _get_verl_async(self, prompt, application_id, **kwargs):
+    async def _get_verl_async(self, prompt, application_id, traj_id=None, step_id=None, agent_id=None, **kwargs):
                 
         batch = self._convert_prompt_verl([prompt], **kwargs)
 
         if "max_tokens" in kwargs:
             batch.meta_info["max_tokens"] = kwargs["max_tokens"]
 
-        output = await self.router.generate_sequences(batch, application_id=application_id, **kwargs)
+        output = await self.router.generate_sequences(
+            batch, 
+            application_id=application_id, 
+            traj_id=traj_id, 
+            step_id=step_id, 
+            agent_id=agent_id, 
+            **kwargs
+        )
 
         attn = output.batch["attention_mask"][0, self.max_prompt_length :]
         tokens = output.batch["responses"][0]
@@ -295,7 +312,14 @@ class AgentExecutionEngine:
             kwargs["max_tokens"] = max_tokens
 
             start_time = time.time()
-            response = await self.get_model_response(prompt_messages, application_id, **kwargs)
+            response = await self.get_model_response(
+                prompt_messages, 
+                application_id, 
+                traj_id=idx,
+                step_id=step_idx,
+                agent_id="single_agent",  # For single agent, we can use a default
+                **kwargs
+            )
             delta_time = time.time() - start_time
             llm_time += delta_time
             total_time += delta_time
@@ -347,9 +371,6 @@ class AgentExecutionEngine:
 
             chat_completions_messages = agent.chat_completions
             assistant_message, env_messages = get_recent_assistant_user_messages(chat_completions_messages)
-            print("Printing assistant message for tokenization: ", assistant_message)
-            print("Printing env messages for tokenization: ", env_messages)
-
             # Check and convert to tokens if necessary
             assert assistant_message is not None or mode != "Token", "Assistant messages is none when accumulating token trajectories which should be conversations. This should not happen."
             assert env_messages is not None or mode != "Token", "Environment messages is none when accumulating token trajectories which should be conversations. This should not happen."
@@ -357,7 +378,7 @@ class AgentExecutionEngine:
             env_msg_tokens, env_msg_masks = [], []
             if assistant_message:
                 assistant_msg_tokens, assistant_msg_masks = convert_messages_to_tokens_and_masks([assistant_message], tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=False, contains_generation_msg=False)
-                temp_assistant_message.append("Dummy message 360")
+                temp_assistant_message.append("Custom Log representing message break between steps")
                 temp_assistant_message.append([assistant_message])
             if env_messages:
                 env_msg_tokens, env_msg_masks = convert_messages_to_tokens_and_masks(env_messages, tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=False, contains_generation_msg=True)
@@ -456,19 +477,12 @@ class AgentExecutionEngine:
         compute_trajectory_reward(trajectory)
         compute_mc_return(trajectory, gamma=self.gamma)
         
-        # Simple print of conversation flow
-        summary = f"\n=== TRAJECTORY {idx} SUMMARY ===\n"
-        summary += f"Assistant messages: {len(temp_assistant_message)} steps\n"
-        for i, msgs in enumerate(temp_assistant_message):
-            summary += f"Printing Message number {i}: {len(msgs)} messages\n"
-            summary += f"{msgs}\n"
-        
-        summary += f"Environment messages: {len(temp_env_messages)} steps\n"
-        for i, msgs in enumerate(temp_env_messages):
-            summary += f"Printing Message number {i}: {len(msgs)} env messages\n"
-            summary += f"{msgs}\n"
-        summary += f"=== END TRAJECTORY {idx} ===\n"
-        print(summary)
+        # Simple trajectory summary with token information
+        steps = len(trajectory.steps)
+        bar = "█" * steps
+        total_tokens = len(prompt_tokens) + len(response_tokens)
+        token_info = f" [agent:{total_tokens}t]"
+        print(f"Traj {idx}: {bar} ({steps} turns){token_info}")
 
         if mode == "Text":
             return trajectory
@@ -482,6 +496,29 @@ class AgentExecutionEngine:
                 data_source = env.entry.get("data_source", "unknown")
                 uid = env.entry.get("uid", f"unknown_{env.idx}")
             
+            # Stream collected tokenization messages for this trajectory
+            import json
+            import os
+            tokenization_log_entry = {
+                "traj_id": idx,
+                "agent_id": "single_agent", 
+                "application_id": application_id,
+                "temp_assistant_messages": temp_assistant_message,
+                "temp_env_messages": temp_env_messages,
+                "trajectory_reward": trajectory.reward,
+                "total_steps": len(trajectory.steps),
+                "timestamp": time.time()
+            }
+            
+            # Create logs directory if it doesn't exist  
+            log_dir = "/workspace/model_response_logs"
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, "tokenization_messages.jsonl")
+            
+            # Append to JSONL file
+            with open(log_file, "a") as f:
+                f.write(json.dumps(tokenization_log_entry) + "\n")
+
             token_result = {
                 "prompt_tokens": torch.tensor(prompt_tokens, dtype=torch.long),
                 "response_tokens": torch.tensor(response_tokens, dtype=torch.long),

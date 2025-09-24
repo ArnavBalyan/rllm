@@ -32,15 +32,15 @@ def create_frozenlake_chain_of_experts_agents(config):
     multi_agent_section = config.get("multi_agent", {})
     
     agent_configs = [
-        AgentConfig(
-            agent_id="proposer",
-            agent_class=FrozenLakeProposerAgent,
-            agent_args={"max_steps": config.agent.max_steps},
-            role=AgentRole.PROPOSER,
-            model_path=config.actor_rollout_ref.model.path,  # Can be different model
-            temperature=0.7,
-            top_p=0.9,
-        ),
+        # AgentConfig(
+        #     agent_id="proposer",
+        #     agent_class=FrozenLakeProposerAgent,
+        #     agent_args={"max_steps": config.agent.max_steps},
+        #     role=AgentRole.PROPOSER,
+        #     model_path=config.actor_rollout_ref.model.path,  # Can be different model
+        #     temperature=0.7,
+        #     top_p=0.9,
+        # ),
         # AgentConfig(
         #     agent_id="expert", 
         #     agent_class=FrozenLakeExpertAgent,
@@ -140,6 +140,12 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
         "train_all_agents": True,  # Enable independent agent training
         "reward_mode": config.multi_agent.reward_mode
     }
+    
+    # Fix batch size config if not set
+    if not hasattr(config.actor_rollout_ref.actor, 'ppo_micro_batch_size') or config.actor_rollout_ref.actor.ppo_micro_batch_size is None:
+        config.actor_rollout_ref.actor.ppo_micro_batch_size = 4
+    if not hasattr(config.actor_rollout_ref.actor, 'ppo_mini_batch_size') or config.actor_rollout_ref.actor.ppo_mini_batch_size is None:
+        config.actor_rollout_ref.actor.ppo_mini_batch_size = 16
     
     multi_agent_config = config.multi_agent
 

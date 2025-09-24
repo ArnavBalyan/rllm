@@ -232,13 +232,9 @@ class PipelineAgentPPOTrainer(AgentPPOTrainer):
                         # compute global_valid tokens
                         mini_batch.meta_info["global_token_num"] = torch.sum(mini_batch.batch["attention_mask"], dim=-1).tolist()
                         # update actor
-                        start_time = time.perf_counter()
-
                         with Timer("update_actor", timing_raw):
                             actor_output = self.actor_wg.update_actor_mini_batch(mini_batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
-                        end_time = time.perf_counter()
-                        print(f"Actor update took {end_time - start_time:.2f} seconds", flush=True)
                         mini_batch_metrics.update(actor_output_metrics)
                         training_batch.append(mini_batch)
                         update_metrics(metrics, mini_batch_metrics)

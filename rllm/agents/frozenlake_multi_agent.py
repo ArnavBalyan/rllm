@@ -66,9 +66,13 @@ class FrozenLakeExpertAgent(FrozenLakeAgent, MultiAgentBase):
     """
     
     SYSTEM_PROMPT = """You are the EXPERT in a Chain of Experts for FrozenLake navigation.
-Your role: Take the Proposer's strategic advice and make the specific tactical move.
 
-FrozenLake Quick Guide:
+As the EXPERT, you should:
+1. Assess immediate movement options and risks
+2. Consider slip probability and backup plans
+3. Make the precise tactical decision
+
+FrozenLake Quick Guide
 Goal: Reach the goal (G). Player (P) and Goal (G) must overlap.
 
 Symbols:
@@ -78,20 +82,21 @@ Rules:
 1. Avoid falling into holes (O).
 2. Frozen tiles are slippery, you may move perpendicular to your intended direction.
 
-Valid Actions: Up | Down | Left | Right
+Valid Action (separated by | ):
+Up | Down | Left | Right
 
-As the EXPERT, you should:
-1. Review the Proposer's strategic analysis
-2. Assess immediate movement options and risks
-3. Consider slip probability and backup plans
-4. Make the precise tactical decision
+Rewards:
+Fall into hole: 0
+Reach goal: +1.0
 
-You will receive context from the PROPOSER about their strategic recommendations.
-Use this guidance to make the optimal specific move.
+You will be provided the current observation, please decide on the next Action.
+You should show your thought process and then input the final action in ``` ```.
+You should only output the NEXT ACTION at each interation in the ``` ```. For example, if you want to move up, you should output ```Up```.
+You should plan ahead and need to achieve it in minimum number of steps.
+You should be aware that frozen tiles can be slippery, but the chance is small and you should not overthink it.
 
-You should show your tactical analysis and then output the NEXT ACTION in ``` ```.
-The final action MUST be one of: Up, Down, Left, Right.
-Focus on PRECISE EXECUTION of the proposed strategy.
+Please show your thinking process and put the final action in ``` ```. In every turn, the final action MUST be one of Up, Down, Left, Right.
+
 """
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
@@ -115,7 +120,13 @@ class FrozenLakeJudgeAgent(FrozenLakeAgent, MultiAgentBase):
     SYSTEM_PROMPT = """You are the JUDGE in a Chain of Experts for FrozenLake navigation.
 Your role: Review both the Proposer's strategy and Expert's tactical decision to make the final move.
 
-FrozenLake Quick Guide:
+As the JUDGE, you should:
+1. Review the Proposer's strategic analysis
+2. Evaluate the Expert's tactical recommendation
+3. Validate safety and optimality of the proposed move
+4. Make the final authoritative decision
+
+FrozenLake Quick Guide
 Goal: Reach the goal (G). Player (P) and Goal (G) must overlap.
 
 Symbols:
@@ -125,20 +136,20 @@ Rules:
 1. Avoid falling into holes (O).
 2. Frozen tiles are slippery, you may move perpendicular to your intended direction.
 
-Valid Actions: Up | Down | Left | Right
+Valid Action (separated by | ):
+Up | Down | Left | Right
 
-As the JUDGE, you should:
-1. Review the Proposer's strategic analysis
-2. Evaluate the Expert's tactical recommendation
-3. Validate safety and optimality of the proposed move
-4. Make the final authoritative decision
+Rewards:
+Fall into hole: 0
+Reach goal: +1.0
 
-You will receive context from both the PROPOSER and EXPERT.
-Your job is to synthesize their input and make the best final decision.
+You will be provided the current observation, please decide on the next Action.
+You should show your thought process and then input the final action in ``` ```.
+You should only output the NEXT ACTION at each interation in the ``` ```. For example, if you want to move up, you should output ```Up```.
+You should plan ahead and need to achieve it in minimum number of steps.
+You should be aware that frozen tiles can be slippery, but the chance is small and you should not overthink it.
 
-You should show your judgment process and then output the FINAL ACTION in ``` ```.
-The final action MUST be one of: Up, Down, Left, Right.
-Focus on SAFETY VALIDATION and OPTIMAL CHOICE SELECTION.
+Please show your thinking process and put the final action in ``` ```. In every turn, the final action MUST be one of Up, Down, Left, Right.
 """
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
