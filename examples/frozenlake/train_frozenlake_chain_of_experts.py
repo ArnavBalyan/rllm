@@ -32,15 +32,15 @@ def create_frozenlake_chain_of_experts_agents(config):
     multi_agent_section = config.get("multi_agent", {})
     
     agent_configs = [
-        # AgentConfig(
-        #     agent_id="proposer",
-        #     agent_class=FrozenLakeProposerAgent,
-        #     agent_args={"max_steps": config.agent.max_steps},
-        #     role=AgentRole.PROPOSER,
-        #     model_path=config.actor_rollout_ref.model.path,  # Can be different model
-        #     temperature=0.7,
-        #     top_p=0.9,
-        # ),
+        AgentConfig(
+            agent_id="proposer",
+            agent_class=FrozenLakeProposerAgent,
+            agent_args={"max_steps": config.agent.max_steps},
+            role=AgentRole.PROPOSER,
+            model_path=config.actor_rollout_ref.model.path, 
+            temperature=0.7,
+            top_p=0.8,
+        ),
         # AgentConfig(
         #     agent_id="expert", 
         #     agent_class=FrozenLakeExpertAgent,
@@ -54,9 +54,9 @@ def create_frozenlake_chain_of_experts_agents(config):
             agent_class=FrozenLakeJudgeAgent,
             agent_args={"max_steps": config.agent.max_steps},
             role=AgentRole.JUDGE,
-            model_path=config.actor_rollout_ref.model.path,  # Can be different model
-            temperature=0.3,
-            top_p=0.7,
+            model_path=config.actor_rollout_ref.model.path, 
+            temperature=0.7,
+            top_p=0.8,
         )
     ]
     

@@ -19,9 +19,9 @@ class FrozenLakeProposerAgent(FrozenLakeAgent, MultiAgentBase):
     """
     
     SYSTEM_PROMPT = """You are the PROPOSER in a Chain of Experts for FrozenLake navigation.
-Your role: Analyze the frozen lake and propose a high-level strategic approach.
+Your role: Analyze the frozen lake and propose a high-level strategic approach. Ensure your response is in 10 words or less.
 
-FrozenLake Quick Guide:
+FrozenLake Quick Guide
 Goal: Reach the goal (G). Player (P) and Goal (G) must overlap.
 
 Symbols:
@@ -31,20 +31,21 @@ Rules:
 1. Avoid falling into holes (O).
 2. Frozen tiles are slippery, you may move perpendicular to your intended direction.
 
-Valid Actions: Up | Down | Left | Right
+Valid Action (separated by | ):
+Up | Down | Left | Right
 
-As the PROPOSER, you should:
-1. Analyze the current board layout
-2. Identify the safest general path direction
-3. Note any immediate dangers (holes near player)
-4. Suggest a strategic approach (e.g., "move right first to avoid holes", "take indirect path for safety")
+Rewards:
+Fall into hole: 0
+Reach goal: +1.0
 
-Your analysis will help the next expert make the specific move decision.
+You will be provided the current observation, please decide on the next Action.
+You should show your thought process and then input the final action in ``` ```.
+You should only output the NEXT ACTION at each interation in the ``` ```. For example, if you want to move up, you should output ```Up```.
+You should plan ahead and need to achieve it in minimum number of steps.
+You should be aware that frozen tiles can be slippery, but the chance is small and you should not overthink it.
+No MATTER WHAT HAPPENS, ENSURE YOUR THINGKING AND RESPONSE IS IN 10 WORDS OR LESS ALWAYS!
 
-You should show your strategic thinking and then propose the NEXT ACTION in ``` ```.
-The final action MUST be one of: Up, Down, Left, Right.
-Focus on SAFETY and STRATEGY rather than just the shortest path.
-PLEASE ENSURE YOUR RESPONSE IS IN 20 WORDS OR LESS.
+Please show your thinking process and put the final action in ``` ```. In every turn, the final action MUST be one of Up, Down, Left, Right.
 """
 
     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
@@ -118,13 +119,12 @@ class FrozenLakeJudgeAgent(FrozenLakeAgent, MultiAgentBase):
     """
     
     SYSTEM_PROMPT = """You are the JUDGE in a Chain of Experts for FrozenLake navigation.
-Your role: Review both the Proposer's strategy and Expert's tactical decision to make the final move.
+Your role: Review both the Proposer's strategy to make the final move.
 
 As the JUDGE, you should:
 1. Review the Proposer's strategic analysis
-2. Evaluate the Expert's tactical recommendation
-3. Validate safety and optimality of the proposed move
-4. Make the final authoritative decision
+2. Validate safety and optimality of the proposed move
+3. Make the final authoritative decision
 
 FrozenLake Quick Guide
 Goal: Reach the goal (G). Player (P) and Goal (G) must overlap.

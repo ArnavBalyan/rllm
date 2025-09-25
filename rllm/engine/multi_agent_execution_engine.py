@@ -308,26 +308,26 @@ class MultiAgentExecutionEngine:
                 # response = f" MODELs RESPONSE for traj{env_idx} step{step_idx} {agent_id}"
                 
                 # Stream prompt messages to file for debugging/monitoring
-                import json
-                import os
-                prompt_log_entry = {
-                    "traj_id": env_idx,
-                    "step_id": step_idx,
-                    "agent_id": agent_id,
-                    "phase_idx": phase_idx,
-                    "application_id": application_id,
-                    "raw_content_sent_to_engine": prompt_msgs,
-                    "max_tokens": max_tokens
-                }
+                # import json
+                # import os
+                # prompt_log_entry = {
+                #     "traj_id": env_idx,
+                #     "step_id": step_idx,
+                #     "agent_id": agent_id,
+                #     "phase_idx": phase_idx,
+                #     "application_id": application_id,
+                #     "raw_content_sent_to_engine": prompt_msgs,
+                #     "max_tokens": max_tokens
+                # }
                 
-                # Create logs directory if it doesn't exist
-                log_dir = "/workspace/model_response_logs"
-                os.makedirs(log_dir, exist_ok=True)
-                log_file = os.path.join(log_dir, "prompt_stream.jsonl")
+                # # Create logs directory if it doesn't exist
+                # log_dir = "/workspace/model_response_logs"
+                # os.makedirs(log_dir, exist_ok=True)
+                # log_file = os.path.join(log_dir, "prompt_stream.jsonl")
                 
-                # Append to JSONL file
-                with open(log_file, "a") as f:
-                    f.write(json.dumps(prompt_log_entry) + "\n")
+                # # Append to JSONL file
+                # with open(log_file, "a") as f:
+                #     f.write(json.dumps(prompt_log_entry) + "\n")
                 
                 response = await engine.get_model_response(
                     prompt_msgs, 

@@ -185,24 +185,24 @@ class Router:
             # print(f"{'='*80}\n")
             
         # Stream prompt messages to file for debugging/monitoring
-            import json
-            import os
-            prompt_log_entry = {
-                "traj_id": traj_id,
-                "step_id": step_id,
-                "agent_id": agent_id,
-                "application_id": application_id,
-                "raw_content_sent_to_engine": formatted_prompt,  # Use the actual formatted prompt from batch
-            }
+            # import json
+            # import os
+            # prompt_log_entry = {
+            #     "traj_id": traj_id,
+            #     "step_id": step_id,
+            #     "agent_id": agent_id,
+            #     "application_id": application_id,
+            #     "raw_content_sent_to_engine": formatted_prompt,  # Use the actual formatted prompt from batch
+            # }
                     
-            # Create logs directory if it doesn't exist
-            log_dir = "/workspace/model_response_logs"
-            os.makedirs(log_dir, exist_ok=True)
-            log_file = os.path.join(log_dir, "prompt_stream_original_version_nochanges.jsonl")
+            # # Create logs directory if it doesn't exist
+            # log_dir = "/workspace/model_response_logs"
+            # os.makedirs(log_dir, exist_ok=True)
+            # log_file = os.path.join(log_dir, "prompt_stream_original_version_nochanges.jsonl")
                     
-            # Append to JSONL file
-            with open(log_file, "a") as f:
-                f.write(json.dumps(prompt_log_entry) + "\n")
+            # # Append to JSONL file
+            # with open(log_file, "a") as f:
+            #     f.write(json.dumps(prompt_log_entry) + "\n")
 
             task = self.submit_completions( 
                 address=address,
