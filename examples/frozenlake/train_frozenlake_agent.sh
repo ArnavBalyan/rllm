@@ -5,11 +5,11 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:False"
 export VLLM_USE_V1=1
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
-export RAY_TMPDIR=/opt/dlami/nvme/ray
-export HF_HOME=/opt/dlami/nvme/huggingface
-export TRANSFORMERS_CACHE=/opt/dlami/nvme/huggingface/transformers
-export HF_DATASETS_CACHE=/opt/dlami/nvme/huggingface/datasets
-export HF_MODULES_CACHE=/opt/dlami/nvme/huggingface/modules
+export RAY_TMPDIR=/dev/shm/ray
+export HF_HOME=/dev/shm/huggingface
+export TRANSFORMERS_CACHE=/dev/shm/huggingface/transformers
+export HF_DATASETS_CACHE=/dev/shm/huggingface/datasets
+export HF_MODULES_CACHE=/dev/shm/huggingface/modules
 
 
 # Find the directory where rllm package is located
@@ -21,7 +21,7 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     data.val_batch_size=4 \
     data.max_prompt_length=4096 \
     data.max_response_length=2096 \
-    actor_rollout_ref.model.path=Qwen/Qwen3-4B \
+    actor_rollout_ref.model.path=Qwen/Qwen3-8B \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
     data.val_files=${RLLM_DIR}/data/rllm-frozenlake/test.parquet \
     actor_rollout_ref.hybrid_engine=True \
@@ -69,7 +69,7 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     trainer.save_freq=1000000s \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
-    trainer.default_local_dir=/opt/dlami/nvme/checkpoints \
+    trainer.default_local_dir=/dev/shm/checkpoints \
     trainer.resume_mode=auto \
     trainer.max_actor_ckpt_to_keep=3 \
     trainer.max_critic_ckpt_to_keep=3 \
