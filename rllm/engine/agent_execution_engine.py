@@ -511,13 +511,13 @@ class AgentExecutionEngine:
             }
             
             # Create logs directory if it doesn't exist  
-            log_dir = "/workspace/model_response_logs"
-            os.makedirs(log_dir, exist_ok=True)
-            log_file = os.path.join(log_dir, "tokenization_messages.jsonl")
+            # log_dir = "/workspace/model_response_logs"
+            # os.makedirs(log_dir, exist_ok=True)
+            # log_file = os.path.join(log_dir, "tokenization_messages.jsonl")
             
-            # Append to JSONL file
-            with open(log_file, "a") as f:
-                f.write(json.dumps(tokenization_log_entry) + "\n")
+            # # Append to JSONL file
+            # with open(log_file, "a") as f:
+            #     f.write(json.dumps(tokenization_log_entry) + "\n")
 
             token_result = {
                 "prompt_tokens": torch.tensor(prompt_tokens, dtype=torch.long),

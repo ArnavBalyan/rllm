@@ -4,16 +4,16 @@ set -x
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:False"
 export VLLM_USE_V1=1
-export NCCL_P2P_DISABLE=1
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
+export VLLM_DISABLE_PREFIX_CACHING=1
 
 RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dirname(rllm.__file__)))")
 
 python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=32 \
-    data.val_batch_size=64 \
+    data.train_batch_size=256 \
+    data.val_batch_size=256 \
     data.max_prompt_length=4096 \
     data.max_response_length=2048 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
@@ -23,14 +23,14 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
-    actor_rollout_ref.actor.ppo_mini_batch_size=4 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=16 \
+    trainer.resume_mode=disable \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=6144 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
-    actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
     actor_rollout_ref.actor.grad_norm_threshold=10 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
@@ -48,33 +48,23 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     actor_rollout_ref.rollout.val_kwargs.top_p=0.8 \
     actor_rollout_ref.rollout.val_kwargs.top_k=20 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
-    actor_rollout_ref.actor.entropy_coeff=0 \
-    +trainer.use_critic=false \
-    +trainer.use_reference_policy=false \
-    +actor_rollout_ref.rollout.log_prob_auto_truncate=true \
-    +actor_rollout_ref.ref.log_prob_auto_truncate=true \
     algorithm.kl_ctrl.kl_coef=0.001 \
     algorithm.mask_truncated_samples=False \
     algorithm.clip_advantages=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='rllm-chain-of-experts_single_agent' \
-    trainer.experiment_name='frozenlake-coe-production-4B-production-single_agent' \
+    trainer.experiment_name='frozenlake-coe-production-8B-production' \
     trainer.val_before_train=False \
-    trainer.n_gpus_per_node=4 \
+    trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=100000 \
-    +multi_agent.training_mode=final_agent \
-    +multi_agent.reward_aggregation=final_agent \
-    +multi_agent.train_all_agents=true \
     +multi_agent.reward_mode=complete \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
-    trainer.rejection_sample=True \
-    trainer.rejection_sample_multiplier=1 \
-    +env.env_args.max_steps=8 \
+    trainer.rejection_sample=False \
+    trainer.rejection_sample_multiplier=16 \
+    +env.env_args.max_steps=10 \
     +env.env_args.is_slippery=False \
     agent.max_steps=10 \
     agent.async_engine=True \
@@ -83,6 +73,6 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     +agent.agent_args.max_steps=10 \
     +agent.agent_args.use_accumulate_history=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=6144 \
-    trainer.total_epochs=1
+    trainer.total_epochs=10
 
 echo "FrozenLake Multi-Agent training completed!" 

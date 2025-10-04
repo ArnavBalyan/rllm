@@ -101,7 +101,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             agent_id = agent_config.agent_id
             
             # Create separate resource pool for this agent
-            agent_resource_pool_spec = {f"{agent_id}_pool": [2]}  # 2 GPUs per agent
+            agent_resource_pool_spec = {f"{agent_id}_pool": [8]}  # 2 GPUs per agent
             agent_mapping = {Role.ActorRollout: f"{agent_id}_pool"}
             agent_rpm = ResourcePoolManager(agent_resource_pool_spec, agent_mapping)
             agent_rpm.create_resource_pool()
@@ -112,6 +112,13 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             
             # Create agent-specific config with different model path
             agent_config_dict = self.config.copy()
+            
+            # DEBUG: Log the values before passing to Ray worker
+            print(f"[MULTI-AGENT DEBUG {agent_id}] BEFORE Ray worker creation:")
+            print(f"  ppo_micro_batch_size = {agent_config_dict.actor_rollout_ref.actor.ppo_micro_batch_size}")
+            print(f"  ppo_micro_batch_size_per_gpu = {agent_config_dict.actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu}")
+            print(f"  Type of ppo_micro_batch_size_per_gpu = {type(agent_config_dict.actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu)}")
+            
             if agent_config.model_path:
                 agent_config_dict.actor_rollout_ref.model.path = agent_config.model_path
             

@@ -32,15 +32,15 @@ def create_frozenlake_chain_of_experts_agents(config):
     multi_agent_section = config.get("multi_agent", {})
     
     agent_configs = [
-        AgentConfig(
-            agent_id="proposer",
-            agent_class=FrozenLakeProposerAgent,
-            agent_args={"max_steps": config.agent.max_steps},
-            role=AgentRole.PROPOSER,
-            model_path=config.actor_rollout_ref.model.path, 
-            temperature=0.7,
-            top_p=0.8,
-        ),
+        # AgentConfig(
+        #     agent_id="proposer",
+        #     agent_class=FrozenLakeProposerAgent,
+        #     agent_args={"max_steps": config.agent.max_steps},
+        #     role=AgentRole.PROPOSER,
+        #     model_path=config.actor_rollout_ref.model.path, 
+        #     temperature=0.7,
+        #     top_p=0.8,
+        # ),
         # AgentConfig(
         #     agent_id="expert", 
         #     agent_class=FrozenLakeExpertAgent,
@@ -114,7 +114,10 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
 
     reward_fn = load_reward_manager(config, tokenizer, num_examine=0, **config.reward_model.get("reward_kwargs", {}))
     val_reward_fn = load_reward_manager(config, tokenizer, num_examine=1)
+    
+    
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
+    
 
     if env_class is None:
         env_class = FrozenLakeEnv
@@ -140,19 +143,14 @@ def train_frozenlake_chain_of_experts(config, agent_class=None, env_class=None, 
         "train_all_agents": True,  # Enable independent agent training
         "reward_mode": config.multi_agent.reward_mode
     }
-    
-    # Fix batch size config if not set
-    if not hasattr(config.actor_rollout_ref.actor, 'ppo_micro_batch_size') or config.actor_rollout_ref.actor.ppo_micro_batch_size is None:
-        config.actor_rollout_ref.actor.ppo_micro_batch_size = 4
-    if not hasattr(config.actor_rollout_ref.actor, 'ppo_mini_batch_size') or config.actor_rollout_ref.actor.ppo_mini_batch_size is None:
-        config.actor_rollout_ref.actor.ppo_mini_batch_size = 16
-    
+        
     multi_agent_config = config.multi_agent
 
     # Create Chain of Experts workflow directly
     from rllm.engine.multi_agent_execution_engine import ChainOfExpertsWorkflow
     workflow = ChainOfExpertsWorkflow(agent_configs)
     
+
     # Create MultiAgentPPOTrainer directly without base trainer
     trainer = MultiAgentPPOTrainer(
         config=config,

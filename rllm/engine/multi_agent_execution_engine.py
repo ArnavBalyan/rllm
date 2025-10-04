@@ -521,13 +521,13 @@ class MultiAgentExecutionEngine:
             }
             
             # Create logs directory if it doesn't exist
-            log_dir = "/workspace/model_response_logs"
-            os.makedirs(log_dir, exist_ok=True)
-            log_file = os.path.join(log_dir, "multi_agent_tokenization_messages.jsonl")
+            # log_dir = "/workspace/model_response_logs"
+            # os.makedirs(log_dir, exist_ok=True)
+            # log_file = os.path.join(log_dir, "multi_agent_tokenization_messages.jsonl")
             
-            # Append to JSONL file
-            with open(log_file, "a") as f:
-                f.write(json.dumps(tokenization_log_entry) + "\n")
+            # # Append to JSONL file
+            # with open(log_file, "a") as f:
+            #     f.write(json.dumps(tokenization_log_entry) + "\n")
 
             return {
                 "idx": env_idx,
