@@ -504,6 +504,9 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 
                         if self.config.trainer.critic_warmup <= self.global_steps:
                             # import json; json.dump({"input_ids": [x.tolist() for x in batch.batch['input_ids']]}, open(f"{self.config.trainer.default_local_dir}/ppo_tokens_{agent_id}_{self.global_steps}.json", 'w'))
+                            # DIAGNOSTIC: Check mask before update_actor
+                            mask = batch.batch["response_mask"]
+                            print(f"🔍 MULTI[{agent_id}] update_actor: mask_mean={mask.float().mean().item():.6f} ones={mask.sum().item()}/{mask.numel()}")
                             # update actor
                             with _timer("update_actor", timing_raw):
                                 agent_worker_group = self.agent_rollout_engines[agent_id].worker_group

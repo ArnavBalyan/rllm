@@ -553,6 +553,10 @@ class MultiAgentExecutionEngine:
         combined_tokens = assistant_msg_tokens + env_msg_tokens
         combined_masks = assistant_msg_masks + env_msg_masks
         
+        # DIAGNOSTIC: Check mask composition
+        if env_msg_masks:
+            print(f"🔍 MULTI[{agent_id},step={step_idx}]: asst_tokens={len(assistant_msg_tokens)} env_tokens={len(env_msg_tokens)} env_mask_mean={sum(env_msg_masks)/len(env_msg_masks):.3f} | combined_mask_mean={sum(combined_masks)/len(combined_masks):.6f}")
+        
         text_logs = []
         
         updated_response_token_len = current_response_token_len + len(combined_tokens)

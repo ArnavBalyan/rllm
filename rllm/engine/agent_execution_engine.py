@@ -438,6 +438,9 @@ class AgentExecutionEngine:
 
             response_tokens.extend(env_msg_tokens)
             response_masks.extend(env_msg_masks)
+            # DIAGNOSTIC: Check mask composition after adding env tokens
+            if env_msg_masks:
+                print(f"🔍 SINGLE[step={step_idx}]: added env_tokens={len(env_msg_tokens)} env_mask_mean={sum(env_msg_masks)/len(env_msg_masks):.3f} | total_mask_mean={sum(response_masks)/len(response_masks):.6f} total_len={len(response_masks)}")
             # Log environment messages
             if env_messages:
                 for env_msg in env_messages:
