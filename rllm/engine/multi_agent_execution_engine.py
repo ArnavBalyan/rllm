@@ -281,20 +281,17 @@ class MultiAgentExecutionEngine:
             phase_actions = {} 
             phase_upstream_contexts = {}
             final_action = None
-            step_start_response_len = response_token_len 
             
             for phase_idx, phase in enumerate(self.phases):
                 agent_id = phase.agent_id
                 agent = agents[agent_id]
                 engine = self.role_engines[agent_id]
                 
-                # Prepare new step before adding upstream context
                 agent.prepare_new_step()
                 
                 upstream_messages = self._get_upstream_phase_response(agent_id, phase_responses)
                 phase_upstream_contexts[agent_id] = upstream_messages
                 
-                # UPSTREAM CONTEXT INJECTION: Add to agent's permanent message history for training
                 if upstream_messages:
                     for msg in upstream_messages:
                         upstream_agent_id = msg["agent_id"]
@@ -302,33 +299,8 @@ class MultiAgentExecutionEngine:
                         agent.add_upstream_context(upstream_agent_id, upstream_response)
                 
                 prompt_msgs = agent.chat_completions.copy()
-                max_tokens = engine.max_response_length - agent_response_token_len[agent_id]
-                
-                # HARDCODED DEBUG RESPONSE - COMMENT OUT FOR REAL TRAINING
-                # response = f" MODELs RESPONSE for traj{env_idx} step{step_idx} {agent_id}"
-                
-                # Stream prompt messages to file for debugging/monitoring
-                # import json
-                # import os
-                # prompt_log_entry = {
-                #     "traj_id": env_idx,
-                #     "step_id": step_idx,
-                #     "agent_id": agent_id,
-                #     "phase_idx": phase_idx,
-                #     "application_id": application_id,
-                #     "raw_content_sent_to_engine": prompt_msgs,
-                #     "max_tokens": max_tokens
-                # }
-                
-                # # Create logs directory if it doesn't exist
-                # log_dir = "/workspace/model_response_logs"
-                # os.makedirs(log_dir, exist_ok=True)
-                # log_file = os.path.join(log_dir, "prompt_stream.jsonl")
-                
-                # # Append to JSONL file
-                # with open(log_file, "a") as f:
-                #     f.write(json.dumps(prompt_log_entry) + "\n")
-                
+                max_tokens = engine.max_response_length - response_token_len
+        
                 response = await engine.get_model_response(
                     prompt_msgs, 
                     application_id, 
@@ -343,16 +315,9 @@ class MultiAgentExecutionEngine:
                 action_str = action.action 
                 
                 phase_responses[agent_id] = response
-                phase_actions[agent_id] = action_str  # Store extracted action
-                # Diagnostics: log generated token length per phase
-                # try:
-                #     gen_len = len(engine.tokenizer.encode(response, add_special_tokens=False))
-                #     print(f"MA_PHASE_TOKENS step={step_idx} phase={phase_idx} agent={agent_id} gen_tokens={gen_len} action={action_str}", flush=True)
-                # except Exception:
-                #     pass
+                phase_actions[agent_id] = action_str
                 final_action = action_str
             
-            # Track agent action matches with final agent (for contribution reward mode)
             final_action_str = phase_actions[final_agent_id]
                 
             for agent_id in phase_actions:
@@ -360,22 +325,14 @@ class MultiAgentExecutionEngine:
                     agent_action_str = phase_actions[agent_id]
                     if agent_action_str == final_action_str:
                         agent_matches[agent_id] += 1
-                        # print(f"MA_ACTION_MATCH step={step_idx} agent={agent_id} action={agent_action_str} matches_final={final_action_str}", flush=True)  # Removed for performance
             
-            if termination_reason == "TRUNCATION":
-                break
-            
-            # Always call env.step with final_action (matching single agent behavior)
+
             observation, reward, done, info = await loop.run_in_executor(
                 None, env.step, final_action
             )
-            # print(f"DEBUG: env_idx={env_idx}, step={step_idx}, action={final_action}, reward={reward}, done={done}")
             total_reward = reward
-            # print(f"DEBUG: phase_responses={' '.join(phase_responses[final_agent_id].split()[:500])}{'...' if len(phase_responses[final_agent_id].split()) > 500 else ''}")
             
-            # Update all agents' internal state with environment feedback (matching single agent parity)
             for agent_id, agent in agents.items():
-                # Pass context about whether this is the final agent
                 is_final_agent = (agent_id == final_agent_id)
                 agent.update_from_env(
                     observation=observation,
@@ -385,36 +342,23 @@ class MultiAgentExecutionEngine:
                     is_final_agent=is_final_agent,
                 )
             
-            final_agent = agents[final_agent_id]
-            if observation:
-                obs_str = str(observation)
-            
-            # Process tokenization for each agent in the workflow
-            # print(f"🔄 TOKENIZATION_LOOP: Processing {len(agents)} agents: {list(agents.keys())}")  # Removed for performance
-            
             any_agent_truncated = False
             for phase_idx, phase in enumerate(self.phases):
                 agent_id = phase.agent_id
                 agent = agents[agent_id]
-                agent_tokens, agent_masks, agent_truncated, agent_text_logs = self._process_agent_tokenization(
-                    agent_id, agent, agents, mode, step_idx, phase_idx, temp_assistant_messages[agent_id], temp_env_messages[agent_id], agent_response_token_len[agent_id]
+                agent_tokens, agent_masks, agent_truncated, _ = self._process_agent_tokenization(
+                    agent_id, agent, agents, mode, step_idx, phase_idx, temp_assistant_messages[agent_id], temp_env_messages[agent_id], response_token_len
                 )
                 
-                # Update agent's accumulated token count
                 agent_response_token_len[agent_id] += len(agent_tokens)
+                response_token_len += len(agent_tokens)
                 
-                # print(f"🔄 AGENT_RESULT: {agent_id} returned {len(agent_tokens)} tokens, {len(agent_masks)} masks, truncated={agent_truncated}")  # Removed for performance
-                
-                # Always collect tokens and masks for all agents
                 agent_response_tokens[agent_id].extend(agent_tokens)
                 agent_response_masks[agent_id].extend(agent_masks)
-                # agent_text_logs is now empty, no need to extend
-                
-                # Track if any agent was truncated
+
                 if agent_truncated:
                     any_agent_truncated = True
             
-            # Apply truncation penalties after processing all agents
             if any_agent_truncated:
                 total_reward = 0.0
                 termination_reason = "TRUNCATION"
@@ -426,24 +370,7 @@ class MultiAgentExecutionEngine:
                 break
             completed_turns = completed_turns + 1
         
-        # # Pretty print conversation flow for each agent (every 5th step only)
-        # if completed_turns % 5 == 0 or completed_turns == 0:  # Log every 5th step or at start
-        #     for agent_id in temp_assistant_messages:
-        #         summary = f"\n=== AGENT {agent_id} TRAJECTORY {env_idx} SUMMARY (Step {completed_turns}) ===\n"
-        #         summary += f"Assistant messages: {len(temp_assistant_messages[agent_id])} steps\n"
-        #         for i, msgs in enumerate(temp_assistant_messages[agent_id]):
-        #             summary += f"Printing Message number {i}: {len(msgs)} messages\n"
-        #             summary += f"{msgs}\n"
-                
-        #         summary += f"Environment messages: {len(temp_env_messages[agent_id])} steps\n"
-        #         for i, msgs in enumerate(temp_env_messages[agent_id]):
-        #             summary += f"Printing Message number {i}: 1 env messages\n"
-        #             summary += f"[{msgs}]\n"
-        #         summary += f"=== END AGENT {agent_id} TRAJECTORY {env_idx} ===\n"
-        #         print(summary)
-        
         if mode == "Token":
-            # Derive optional metadata for downstream consumers
             data_source = "unknown"
             uid = f"unknown_{env_idx}"
             try:
@@ -623,16 +550,14 @@ class MultiAgentExecutionEngine:
                 contains_generation_msg=True
             )
         
-        # Combine assistant and environment tokens
         combined_tokens = assistant_msg_tokens + env_msg_tokens
         combined_masks = assistant_msg_masks + env_msg_masks
         
         text_logs = []
         
-        new_total_len = current_response_token_len + len(combined_tokens)
-        if new_total_len >= engine.max_response_length:
-            truncation_length = engine.max_response_length - current_response_token_len
-            
+        updated_response_token_len = current_response_token_len + len(combined_tokens)
+        if updated_response_token_len >= engine.max_response_length:
+            truncation_length = engine.max_response_length - updated_response_token_len
             if truncation_length < 0:
                 truncated_response_tokens = combined_tokens[:truncation_length]
                 truncated_response_masks = combined_masks[:truncation_length]
@@ -640,12 +565,10 @@ class MultiAgentExecutionEngine:
                 truncated_response_tokens = combined_tokens
                 truncated_response_masks = combined_masks
             
-            # Apply reward penalty only if assistant tokens exceed limit
             cur_step = agent.get_current_state()
-            if current_response_token_len + len(assistant_msg_tokens) > engine.max_response_length:
-                if hasattr(cur_step, 'reward'):
-                    cur_step.reward = 0.0
-            
+            if updated_response_token_len - len(env_msg_tokens) > engine.max_response_length:
+                cur_step.reward = 0.0
+            cur_step.done = True
             return truncated_response_tokens, truncated_response_masks, True, text_logs
         
         return combined_tokens, combined_masks, False, text_logs

@@ -312,6 +312,7 @@ class AgentExecutionEngine:
             kwargs["max_tokens"] = max_tokens
 
             start_time = time.time()
+            # response = "<think><think>:\n\n```left```"
             response = await self.get_model_response(
                 prompt_messages, 
                 application_id, 

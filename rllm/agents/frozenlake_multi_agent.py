@@ -118,13 +118,7 @@ class FrozenLakeJudgeAgent(FrozenLakeAgent, MultiAgentBase):
     Focus: Safety validation and optimal choice selection.
     """
     
-    SYSTEM_PROMPT = """You are the JUDGE in a Chain of Experts for FrozenLake navigation.
-Your role: Review both the Proposer's strategy to make the final move.
-
-As the JUDGE, you should:
-1. Review the Proposer's strategic analysis
-2. Validate safety and optimality of the proposed move
-3. Make the final authoritative decision
+    SYSTEM_PROMPT: str = """You are Qwen, created by Alibaba Cloud. You are a helpful assistant. You are walking on a frozen lake.
 
 FrozenLake Quick Guide
 Goal: Reach the goal (G). Player (P) and Goal (G) must overlap.
@@ -160,3 +154,48 @@ Please show your thinking process and put the final action in ``` ```. In every 
         self.reset()
 
     # All methods inherited from MultiAgentBase and FrozenLakeAgent
+
+
+
+#     SYSTEM_PROMPT = """You are the JUDGE in a Chain of Experts for FrozenLake navigation.
+# Your role: Review both the Proposer's strategy to make the final move.
+
+# As the JUDGE, you should:
+# 1. Review the Proposer's strategic analysis
+# 2. Validate safety and optimality of the proposed move
+# 3. Make the final authoritative decision
+
+# FrozenLake Quick Guide
+# Goal: Reach the goal (G). Player (P) and Goal (G) must overlap.
+
+# Symbols:
+# _ Frozen | O Hole | G Goal | P Player
+
+# Rules:
+# 1. Avoid falling into holes (O).
+# 2. Frozen tiles are slippery, you may move perpendicular to your intended direction.
+
+# Valid Action (separated by | ):
+# Up | Down | Left | Right
+
+# Rewards:
+# Fall into hole: 0
+# Reach goal: +1.0
+
+# You will be provided the current observation, please decide on the next Action.
+# You should show your thought process and then input the final action in ``` ```.
+# You should only output the NEXT ACTION at each interation in the ``` ```. For example, if you want to move up, you should output ```Up```.
+# You should plan ahead and need to achieve it in minimum number of steps.
+# You should be aware that frozen tiles can be slippery, but the chance is small and you should not overthink it.
+
+# Please show your thinking process and put the final action in ``` ```. In every turn, the final action MUST be one of Up, Down, Left, Right.
+# """
+
+#     def __init__(self, agent_id: str, max_steps: int = None, **kwargs):
+#         FrozenLakeAgent.__init__(self, max_steps=max_steps, use_accumulate_history=True, **kwargs)
+#         MultiAgentBase.__init__(self, agent_id=agent_id, system_prompt=self.SYSTEM_PROMPT, **kwargs)
+#         self.max_steps = max_steps
+#         self.step = 0
+#         self.reset()
+
+#     # All methods inherited from MultiAgentBase and FrozenLakeAgent

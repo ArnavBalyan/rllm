@@ -396,6 +396,7 @@ class AgentPPOTrainer(RayPPOTrainer):
 
                     # implement critic warmup
                     if self.config.trainer.critic_warmup <= self.global_steps:
+                        # import json; json.dump({"input_ids": [x.tolist() for x in batch.batch['input_ids']]}, open(f"{self.config.trainer.default_local_dir}/ppo_tokens_{self.global_steps}.json", 'w'))
                         # update actor
                         with _timer("update_actor", timing_raw):
                             actor_output = self.actor_rollout_wg.update_actor(batch)

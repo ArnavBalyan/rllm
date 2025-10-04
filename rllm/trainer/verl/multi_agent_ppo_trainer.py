@@ -472,6 +472,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
 
                             with _timer("old_log_prob", timing_raw):
                                 agent_worker_group = self.agent_rollout_engines[agent_id].worker_group
+                                print(f"Agent {agent_id} world_size: {agent_worker_group.world_size}")
+                                print(f"Helper rollout_wg world_size: {getattr(self, 'rollout_wg', None) and self.rollout_wg.world_size}")
+                                print(f"Helper actor_rollout_wg world_size: {getattr(self, 'actor_rollout_wg', None) and self.actor_rollout_wg.world_size}")
+
                                 old_log_prob = agent_worker_group.compute_log_prob(batch)
                                 batch = batch.union(old_log_prob)
 
@@ -499,10 +503,12 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         print("critic update complete")
                 
                         if self.config.trainer.critic_warmup <= self.global_steps:
+                            # import json; json.dump({"input_ids": [x.tolist() for x in batch.batch['input_ids']]}, open(f"{self.config.trainer.default_local_dir}/ppo_tokens_{agent_id}_{self.global_steps}.json", 'w'))
                             # update actor
                             with _timer("update_actor", timing_raw):
                                 agent_worker_group = self.agent_rollout_engines[agent_id].worker_group
                                 actor_output = agent_worker_group.update_actor(batch)
+                                
                             actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                             metrics_global[agent_id].update(actor_output_metrics)
                         print("actor update complete")

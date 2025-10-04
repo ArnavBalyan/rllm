@@ -1,0 +1,6 @@
+{
+  "frozenlake_debug": {
+    "train": "/home/arnav/workspace/rllm/rllm/data/datasets/frozenlake_debug/train.parquet",
+    "test": "/home/arnav/workspace/rllm/rllm/data/datasets/frozenlake_debug/test.parquet"
+  }
+}
