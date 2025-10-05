@@ -301,15 +301,18 @@ class MultiAgentExecutionEngine:
                 prompt_msgs = agent.chat_completions.copy()
                 max_tokens = engine.max_response_length - response_token_len
         
-                response = await engine.get_model_response(
-                    prompt_msgs, 
-                    application_id, 
-                    traj_id=env_idx,
-                    step_id=step_idx,
-                    agent_id=agent_id,
-                    max_tokens=max_tokens,
-                    **engine.sampling_params
-                )
+                replay_data = kwargs.get("meta_info", {}).get("replay_data")
+                if replay_data and env_idx < len(replay_data):
+                    saved_chat = replay_data[env_idx]["chat_completions"]
+                    asst_index = 2 + step_idx * 2
+                    if asst_index < len(saved_chat) and saved_chat[asst_index]["role"] == "assistant":
+                        response = saved_chat[asst_index]["content"]
+                        if step_idx == 0 and env_idx == 0:
+                            print(f"🔁 MULTI REPLAY: Using saved responses for agent {agent_id}")
+                    else:
+                        response = ""
+                else:
+                    response = ""
                 
                 action = agent.complete_step_with_model_response(response)
                 action_str = action.action 

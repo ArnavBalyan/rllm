@@ -204,11 +204,26 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         
         env_args = batch.non_tensor_batch["extra_info"].tolist()
         
+        # REPLAY: Load saved chat_completions and inject board_desc
+        import os
+        replay_file = os.getenv("REPLAY_CHAT_FILE", "/home/arnav/workspace/1.jsonl")  # Default to hardcoded path
+        if replay_file and os.path.exists(replay_file):
+            with open(replay_file, 'r') as f:
+                self.replay_data = [json.loads(line) for line in f]
+            print(f"🔁 MULTI REPLAY: Loaded {len(self.replay_data)} items from {replay_file}")
+        else:
+            self.replay_data = None
+        
         envs = []
         for i, env_arg in enumerate(env_args):
             if isinstance(env_arg, str):
-                env_arg = json.loads(env_arg)
-            env = self.env_class.from_dict({**env_arg, **self.env_args})
+                env_config = json.loads(env_arg)
+            else:
+                env_config = env_arg
+            # Inject replay board_desc if available
+            if self.replay_data and i < len(self.replay_data) and "board_desc" in self.replay_data[i]:
+                env_config["desc"] = self.replay_data[i]["board_desc"]
+            env = self.env_class.from_dict({**env_config, **self.env_args})
             envs.append(env)
 
         self.multi_agent_engine.update_envs_and_agents(envs)
@@ -395,6 +410,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     "chain_of_experts_rollout": True,
                     "workflow_type": self.workflow.workflow_id,
                     "temperature": self.config.actor_rollout_ref.rollout.temperature,
+                    "replay_data": getattr(self, 'replay_data', None),  # Pass saved chat_completions for replay
                 }
                 print("Batch dict 364")
                 

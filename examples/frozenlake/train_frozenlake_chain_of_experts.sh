@@ -12,7 +12,7 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=256 \
+    data.train_batch_size=512 \
     data.val_batch_size=256 \
     data.max_prompt_length=4096 \
     data.max_response_length=2048 \

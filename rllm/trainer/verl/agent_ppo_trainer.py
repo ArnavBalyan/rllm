@@ -97,13 +97,27 @@ class AgentPPOTrainer(RayPPOTrainer):
         """
         env_args = batch.non_tensor_batch["extra_info"].tolist()
 
+        # REPLAY: Load saved chat_completions and inject board_desc
+        import os
+        replay_file = os.getenv("REPLAY_CHAT_FILE", "/home/arnav/workspace/1.jsonl")  # Default to hardcoded path
+        if replay_file and os.path.exists(replay_file):
+            with open(replay_file, 'r') as f:
+                self.replay_data = [json.loads(line) for line in f]
+            print(f"🔁 REPLAY: Loaded {len(self.replay_data)} items from {replay_file}")
+        else:
+            self.replay_data = None
+
         full_agent_args = dict(self.config.agent.get("agent_args", {})) | self.agent_args
         base_env_args = dict(self.config.env.get("env_args", {})) | self.env_args
 
         def _create_env(i):
             if isinstance(env_args[i], str):
-                env_args[i] = json.loads(env_args[i])
-            return i, self.env_class.from_dict({**env_args[i], **base_env_args})
+                env_config = json.loads(env_args[i])
+            else:
+                env_config = env_args[i]
+            if self.replay_data and i < len(self.replay_data) and "board_desc" in self.replay_data[i]:
+                env_config["desc"] = self.replay_data[i]["board_desc"]
+            return i, self.env_class.from_dict({**env_config, **base_env_args})
 
         def _create_agent(i):
             return i, self.agent_class(**full_agent_args)
@@ -148,12 +162,12 @@ class AgentPPOTrainer(RayPPOTrainer):
         import time
 
         start_time = time.time()
-        if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
-            val_metrics = self._validate_agent()
-            pprint(f"Initial validation metrics: {val_metrics}")
-            logger.log(data=val_metrics, step=self.global_steps)
-            if self.config.trainer.get("val_only", False):
-                return
+        # if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
+            # val_metrics = self._validate_agent()
+            # pprint(f"Initial validation metrics: {val_metrics}")
+            # logger.log(data=val_metrics, step=self.global_steps)
+            # if self.config.trainer.get("val_only", False):
+                # return
         print(f"Time taken to validate agent: {time.time() - start_time}")
         # we start from step 1
         self.global_steps += 1
@@ -172,12 +186,15 @@ class AgentPPOTrainer(RayPPOTrainer):
                 timing_raw = {}
 
                 batch.pop(batch_keys=["input_ids", "attention_mask", "position_ids"])
-                batch.meta_info = {
-                    "agent_rollout": True,  # no need to generate multiple ones since environment is repeated already
-                }
 
                 with _timer("step", timing_raw):
                     self.init_envs_and_agents(batch)
+                    
+                    # Set meta_info AFTER init_envs_and_agents loads replay_data
+                    batch.meta_info = {
+                        "agent_rollout": True,
+                        "replay_data": getattr(self, 'replay_data', None),
+                    }
 
                     if self.config.agent.use_stepwise_advantage:
                         final_gen_batch_output = self.generate_agent_steps(timing_raw=timing_raw, meta_info=batch.meta_info, uids=batch.non_tensor_batch["uid"])
@@ -407,14 +424,14 @@ class AgentPPOTrainer(RayPPOTrainer):
                         metrics.update(actor_output_metrics)
 
                     # validate
-                    if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
-                        with _timer("testing", timing_raw):
-                            val_metrics: dict = self._validate_agent()
-                        metrics.update(val_metrics)
+                    # if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
+                        # with _timer("testing", timing_raw):
+                            # val_metrics: dict = self._validate_agent()
+                        # metrics.update(val_metrics)
 
-                    if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
-                        with _timer("save_checkpoint", timing_raw):
-                            self._save_checkpoint()
+                    # if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
+                        # with _timer("save_checkpoint", timing_raw):
+                            # self._save_checkpoint()
 
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
@@ -425,13 +442,13 @@ class AgentPPOTrainer(RayPPOTrainer):
 
                 self.global_steps += 1
 
-                if self.global_steps >= self.total_training_steps:
+                # if self.global_steps >= self.total_training_steps:
                     # perform validation after training
-                    if self.val_reward_fn is not None:
-                        val_metrics = self._validate_agent()
-                        pprint(f"Final validation metrics: {val_metrics}")
-                        logger.log(data=val_metrics, step=self.global_steps)
-                    return
+                    # if self.val_reward_fn is not None:
+                        # val_metrics = self._validate_agent()
+                        # pprint(f"Final validation metrics: {val_metrics}")
+                        # logger.log(data=val_metrics, step=self.global_steps)
+                    # return
 
     def _validate_agent(self):
         rewards_lst = []
@@ -618,7 +635,8 @@ class AgentPPOTrainer(RayPPOTrainer):
             all_response_tokens_list.append(response_tokens)
             all_masks_list.append(traj["response_masks"])
             traj_scores.append(traj["trajectory_reward"])
-            chat_completions.append(traj["chat_completions"])
+            # chat_completions.append(traj["chat_completions"])
+            chat_completions.append({"chat_completions": traj["chat_completions"], "board_desc": traj["board_desc"]})
             traj_metrics.append(traj["metrics"])
 
         # Flatten traj_metrics into a dict of lists
@@ -644,7 +662,9 @@ class AgentPPOTrainer(RayPPOTrainer):
         with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
             for chat_completion in chat_completions:
                 f.write(json.dumps(chat_completion) + "\n")
-
+        
+        
+        raise Exception("Stopping here")
         # reverse the list and create tensors, pad, then flip to achieve left padding
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
             [torch.flip(i, dims=[0]) for i in all_initial_tokens_list],

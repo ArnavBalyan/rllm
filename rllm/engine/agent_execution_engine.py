@@ -312,15 +312,27 @@ class AgentExecutionEngine:
             kwargs["max_tokens"] = max_tokens
 
             start_time = time.time()
-            # response = "<think><think>:\n\n```left```"
-            response = await self.get_model_response(
-                prompt_messages, 
-                application_id, 
-                traj_id=idx,
-                step_id=step_idx,
-                agent_id="single_agent",  # For single agent, we can use a default
-                **kwargs
-            )
+            # REPLAY: Use saved response if available
+            replay_data = kwargs.get("meta_info", {}).get("replay_data")
+            if idx == 0 and step_idx == 0:
+                print(f"🔍 REPLAY DEBUG: replay_data={'dict' if isinstance(replay_data, dict) else ('list' if isinstance(replay_data, list) else type(replay_data).__name__ if replay_data else None)} | len={len(replay_data) if replay_data else 0}")
+            if replay_data and idx < len(replay_data):
+                saved_chat = replay_data[idx]["chat_completions"]
+                asst_index = 2 + step_idx * 2
+                if idx == 0 and step_idx == 0:
+                    print(f"🔍 REPLAY idx={idx} step={step_idx} | asst_index={asst_index} chat_len={len(saved_chat)} | role={saved_chat[asst_index]['role'] if asst_index < len(saved_chat) else 'OUT_OF_BOUNDS'}")
+                if asst_index < len(saved_chat) and saved_chat[asst_index]["role"] == "assistant":
+                    response = saved_chat[asst_index]["content"]
+                    if step_idx == 0 and idx == 0:
+                        print(f"🔁 REPLAY: Using saved response | content_len={len(response)}")
+                else:
+                    if idx == 0 and step_idx == 0:
+                        print(f"❌ REPLAY FAIL: asst_index={asst_index} >= chat_len={len(saved_chat)} OR role!='assistant'")
+                    response = ""
+            else:
+                if idx == 0 and step_idx == 0:
+                    print(f"❌ REPLAY FAIL: replay_data={replay_data is not None} idx={idx} len={len(replay_data) if replay_data else 0}")
+                response = ""
             delta_time = time.time() - start_time
             llm_time += delta_time
             total_time += delta_time
@@ -372,6 +384,8 @@ class AgentExecutionEngine:
 
             chat_completions_messages = agent.chat_completions
             assistant_message, env_messages = get_recent_assistant_user_messages(chat_completions_messages)
+            print(f"🔍 SINGLE[traj={idx},step={step_idx}]: done={done} | has_asst={assistant_message is not None} has_env={len(env_messages) if env_messages else 0} msgs")
+            
             # Check and convert to tokens if necessary
             assert assistant_message is not None or mode != "Token", "Assistant messages is none when accumulating token trajectories which should be conversations. This should not happen."
             assert env_messages is not None or mode != "Token", "Environment messages is none when accumulating token trajectories which should be conversations. This should not happen."
@@ -431,6 +445,7 @@ class AgentExecutionEngine:
                 cur_step.done = done
                 break
 
+            print(f"🔍 SINGLE[traj={idx},step={step_idx}]: BEFORE done check | done={done} env_msg_tokens={len(env_msg_tokens)} env_msg_masks={len(env_msg_masks)}")
             # Check if episode is done
             if done:
                 termination_reason = "ENV_DONE"
@@ -440,7 +455,7 @@ class AgentExecutionEngine:
             response_masks.extend(env_msg_masks)
             # DIAGNOSTIC: Check mask composition after adding env tokens
             if env_msg_masks:
-                print(f"🔍 SINGLE[step={step_idx}]: added env_tokens={len(env_msg_tokens)} env_mask_mean={sum(env_msg_masks)/len(env_msg_masks):.3f} | total_mask_mean={sum(response_masks)/len(response_masks):.6f} total_len={len(response_masks)}")
+                print(f"🔍 SINGLE[traj={idx},step={step_idx}]: added env_tokens={len(env_msg_tokens)} env_mask_mean={sum(env_msg_masks)/len(env_msg_masks):.3f} | total_mask_mean={sum(response_masks)/len(response_masks):.6f} total_len={len(response_masks)}")
             # Log environment messages
             if env_messages:
                 for env_msg in env_messages:
@@ -533,6 +548,7 @@ class AgentExecutionEngine:
                 "response_text_log": response_text_log,
                 "data_source": data_source,
                 "uid": uid,
+                "board_desc": env.preserved_desc,
                 "metrics": {
                     "steps": len(trajectory.steps),
                     "reward_time": reward_time,

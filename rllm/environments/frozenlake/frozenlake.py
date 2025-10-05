@@ -175,9 +175,11 @@ class FrozenLakeEnv(GymFrozenLakeEnv, BaseEnv):
 
         if desc is None:
             random_map, goal_position = generate_random_map(size=size, p=p, seed=seed)
+            self.preserved_desc = random_map  # Already list of strings
         else:
             random_map = np.asarray(copy.deepcopy(desc), dtype="c")
             goal_position = get_goal_position(random_map)
+            self.preserved_desc = [''.join(cell.decode() for cell in row) for row in random_map]
 
         self.goal_postion = goal_position
 
@@ -288,4 +290,11 @@ class FrozenLakeEnv(GymFrozenLakeEnv, BaseEnv):
 
     @staticmethod
     def from_dict(env_info: dict) -> "FrozenLakeEnv":
-        return FrozenLakeEnv(size=env_info["size"], seed=env_info["seed"], p=env_info["p"], max_steps=env_info.get("max_steps", MAX_STEPS), is_slippery=env_info.get("is_slippery", False))
+        return FrozenLakeEnv(
+            size=env_info["size"],
+            seed=env_info["seed"],
+            p=env_info["p"],
+            max_steps=env_info.get("max_steps", MAX_STEPS),
+            is_slippery=env_info.get("is_slippery", False),
+            desc=env_info.get("desc", None)  # Pass desc for replay
+        )
