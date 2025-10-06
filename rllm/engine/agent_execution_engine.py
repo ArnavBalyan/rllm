@@ -506,14 +506,15 @@ class AgentExecutionEngine:
         if mode == "Text":
             return trajectory
         elif mode == "Token":
+            # Extract UID from dataloader (will fail if not present)
+            uid = kwargs["meta_info"]["uids"][idx]
+            
+            # Extract data_source from env if available
             data_source = "unknown"
-            uid = f"unknown_{env.idx}"
             if hasattr(env, 'task_data') and env.task_data:
                 data_source = env.task_data.get("data_source", "unknown")
-                uid = env.task_data.get("uid", f"unknown_{env.idx}")
             elif hasattr(env, 'entry') and env.entry:
                 data_source = env.entry.get("data_source", "unknown")
-                uid = env.entry.get("uid", f"unknown_{env.idx}")
             
             # Stream collected tokenization messages for this trajectory
             import json

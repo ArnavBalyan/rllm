@@ -238,7 +238,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 timing_raw=timing_raw,
                 meta_info=meta_info
             )
-            # raise Exception("Stopping here")
         agent_batches = {}
         metrics = {}
         # Save multi-agent response text logs to understand tokenization
@@ -285,6 +284,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     f"traj/{k}_max": v_list.max(),
                 }
             )
+        raise Exception("Stopping here")
 
         return agent_batches, metrics
     
@@ -310,13 +310,36 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             all_response_tokens_list.append(response_tokens)
             all_masks_list.append(traj["response_masks"])
             traj_scores.append(traj["trajectory_reward"])
-            chat_completions.append(traj["chat_completions"])
+            chat_completions.append({"chat_completions": traj["chat_completions"], "board_desc": workflow_result["board_desc"]})
+        
+        # Extract UIDs from workflow results (passed from dataloader)
+        traj_uids = [workflow_result["uid"] for workflow_result in workflow_results]
 
         save_dir = os.path.join(self.config.trainer.default_local_dir, f"chat_completions/{agent_id}")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
             for chat_completion in chat_completions:
                 f.write(json.dumps(chat_completion) + "\n")
+
+        # Sort all lists by uid for stable comparison with single-agent
+        sorted_indices = sorted(range(len(traj_uids)), key=lambda i: traj_uids[i])
+        all_initial_tokens_list = [all_initial_tokens_list[i] for i in sorted_indices]
+        all_response_tokens_list = [all_response_tokens_list[i] for i in sorted_indices]
+        all_masks_list = [all_masks_list[i] for i in sorted_indices]
+        traj_scores = [traj_scores[i] for i in sorted_indices]
+        traj_uids = [traj_uids[i] for i in sorted_indices]
+
+        # LOG: Before padding
+        with open(f"/home/arnav/workspace/debug_multi_{agent_id}_before_pad_step{self.global_steps}.jsonl", 'w') as f:
+            for i in range(len(all_response_tokens_list)):
+                f.write(json.dumps({
+                    "uid": traj_uids[i],
+                    "prompt_len": len(all_initial_tokens_list[i]),
+                    "response_len": len(all_response_tokens_list[i]),
+                    "mask_len": len(all_masks_list[i]),
+                    "response_tokens": all_response_tokens_list[i].tolist(),
+                    "response_mask": all_masks_list[i].tolist(),
+                }) + "\n")
 
         # Pad and create tensors (same logic as base class)
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
@@ -363,6 +386,21 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             "traj_mask": traj_mask,
         }
         
+        # LOG: After padding
+        with open(f"/home/arnav/workspace/debug_multi_{agent_id}_after_pad_step{self.global_steps}.jsonl", 'w') as f:
+            for i in range(response_batch.shape[0]):
+                f.write(json.dumps({
+                    "uid": traj_uids[i],
+                    "prompt_padded_len": prompts_batch.shape[1],
+                    "response_padded_len": response_batch.shape[1],
+                    "prompt_tokens_pad": prompts_batch[i].tolist(),
+                    "response_tokens_pad": response_batch[i].tolist(),
+                    "traj_mask_pad": traj_mask[i].tolist(),
+                    "attention_mask": attention_mask[i].tolist(),
+                    "reward_sum": score_batch[i].sum().item(),
+                }) + "\n")
+        print(f"💾 MULTI[{agent_id}]: debug_multi_{agent_id}_before/after_pad_step{self.global_steps}.jsonl")
+        
         return DataProto.from_dict(tensors=tensor_batch)
     
     def fit_multi_agent(self):
@@ -395,7 +433,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         for epoch in range(self.config.trainer.total_epochs):
             for batch_dict in self.train_dataloader:
                 batch_global: DataProto = DataProto.from_single_dict(batch_dict)
-                batch_global.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch_global.batch))], dtype=object)
                 batch_global = batch_global.repeat(
                     repeat_times=self.config.actor_rollout_ref.rollout.n,
                     interleave=True,
@@ -406,18 +443,24 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 timing_raw = {}
                 
                 batch_global.pop(batch_keys=["input_ids", "attention_mask", "position_ids"])
-                batch_global.meta_info = {
-                    "chain_of_experts_rollout": True,
-                    "workflow_type": self.workflow.workflow_id,
-                    "temperature": self.config.actor_rollout_ref.rollout.temperature,
-                    "replay_data": getattr(self, 'replay_data', None),  # Pass saved chat_completions for replay
-                }
                 print("Batch dict 364")
                 
                 with _timer("chain_of_experts_batch", timing_raw):
                     print("Batch dict 367")
                     
                     self.init_envs_and_agents(batch_global)
+                    
+                    # Use replay data index as UID
+                    batch_global.non_tensor_batch["uid"] = np.array([str(i) for i in range(len(self.replay_data))], dtype=object)
+                    
+                    # Set meta_info AFTER init_envs_and_agents loads replay_data
+                    batch_global.meta_info = {
+                        "chain_of_experts_rollout": True,
+                        "workflow_type": self.workflow.workflow_id,
+                        "temperature": self.config.actor_rollout_ref.rollout.temperature,
+                        "replay_data": getattr(self, 'replay_data', None),
+                        "uids": batch_global.non_tensor_batch["uid"].tolist(),
+                    }
                     print("Batch dict 370")
 
                     # at this point the system ahs multiple boards, and coordinator agent assigned

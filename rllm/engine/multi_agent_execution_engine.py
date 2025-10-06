@@ -301,17 +301,25 @@ class MultiAgentExecutionEngine:
                 prompt_msgs = agent.chat_completions.copy()
                 max_tokens = engine.max_response_length - response_token_len
         
-                replay_data = kwargs.get("meta_info", {}).get("replay_data")
+                replay_data = kwargs.get("replay_data")
+                if env_idx == 0 and step_idx == 0:
+                    print(f"🔍 MULTI REPLAY DEBUG[{agent_id}]: replay_data={'dict' if isinstance(replay_data, dict) else ('list' if isinstance(replay_data, list) else type(replay_data).__name__ if replay_data else None)} | len={len(replay_data) if replay_data else 0}")
                 if replay_data and env_idx < len(replay_data):
                     saved_chat = replay_data[env_idx]["chat_completions"]
                     asst_index = 2 + step_idx * 2
+                    if env_idx == 0 and step_idx == 0:
+                        print(f"🔍 MULTI REPLAY[{agent_id}] env={env_idx} step={step_idx} | asst_index={asst_index} chat_len={len(saved_chat)} | role={saved_chat[asst_index]['role'] if asst_index < len(saved_chat) else 'OUT_OF_BOUNDS'}")
                     if asst_index < len(saved_chat) and saved_chat[asst_index]["role"] == "assistant":
                         response = saved_chat[asst_index]["content"]
                         if step_idx == 0 and env_idx == 0:
-                            print(f"🔁 MULTI REPLAY: Using saved responses for agent {agent_id}")
+                            print(f"🔁 MULTI REPLAY: Using saved response for {agent_id} | content_len={len(response)}")
                     else:
+                        if env_idx == 0 and step_idx == 0:
+                            print(f"❌ MULTI REPLAY FAIL[{agent_id}]: asst_index={asst_index} >= chat_len={len(saved_chat)} OR role!='assistant'")
                         response = ""
                 else:
+                    if env_idx == 0 and step_idx == 0:
+                        print(f"❌ MULTI REPLAY FAIL[{agent_id}]: replay_data={replay_data is not None} env_idx={env_idx} len={len(replay_data) if replay_data else 0}")
                     response = ""
                 
                 action = agent.complete_step_with_model_response(response)
@@ -345,44 +353,87 @@ class MultiAgentExecutionEngine:
                     is_final_agent=is_final_agent,
                 )
             
+            # Step 1: Encode assistant messages for all agents (always)
+            agent_env_messages_cache = {}  # Store env_messages for later use
             any_agent_truncated = False
+            
             for phase_idx, phase in enumerate(self.phases):
                 agent_id = phase.agent_id
                 agent = agents[agent_id]
-                agent_tokens, agent_masks, agent_truncated, _ = self._process_agent_tokenization(
-                    agent_id, agent, agents, mode, step_idx, phase_idx, temp_assistant_messages[agent_id], temp_env_messages[agent_id], response_token_len
+                engine = self.role_engines[agent_id]
+                
+                # Encode assistant messages
+                asst_tokens, asst_masks, asst_msgs, env_msgs = self._encode_assistant_messages(
+                    agent_id,
+                    agent,
+                    mode,
+                    step_idx,
+                    phase_idx,
+                    temp_assistant_messages[agent_id],
                 )
-                
-                agent_response_token_len[agent_id] += len(agent_tokens)
-                response_token_len += len(agent_tokens)
-                
-                agent_response_tokens[agent_id].extend(agent_tokens)
-                agent_response_masks[agent_id].extend(agent_masks)
 
-                if agent_truncated:
+                env_tokens_for_budget, env_masks_for_budget = self._encode_env_messages(
+                    agent_id,
+                    env_msgs,
+                    temp_env_messages=None,
+                )
+
+                agent_env_messages_cache[agent_id] = env_msgs  # stash env for later
+
+                total_step_tokens = len(asst_tokens) + len(env_tokens_for_budget)
+                agent_response_token_len[agent_id] += total_step_tokens
+                response_token_len += total_step_tokens
+
+                if response_token_len >= engine.max_response_length:
+                    # Need to truncate combined sequence exactly once (no later env append)
+                    combined_tokens = asst_tokens + env_tokens_for_budget
+                    combined_masks = asst_masks + env_masks_for_budget
+
+                    overflow = response_token_len - engine.max_response_length
+                    keep_len = max(0, len(combined_tokens) - overflow)
+
+                    agent_response_tokens[agent_id].extend(combined_tokens[:keep_len])
+                    agent_response_masks[agent_id].extend(combined_masks[:keep_len])
+
+                    if response_token_len - len(env_tokens_for_budget) > engine.max_response_length:
+                        total_reward = 0.0
+
                     any_agent_truncated = True
+                    termination_reason = "TRUNCATION"
+                else:
+                    # Safe: append assistant tokens now; env tokens will be appended later if not done
+                    agent_response_tokens[agent_id].extend(asst_tokens)
+                    agent_response_masks[agent_id].extend(asst_masks)
             
             if any_agent_truncated:
-                total_reward = 0.0
-                termination_reason = "TRUNCATION"
-                
-            if termination_reason == "TRUNCATION":
                 break
-                
+            
             if done:
+                termination_reason = "ENV_DONE"
                 break
+            
+            # Step 3: Not done - add env tokens to all agents
+            for phase_idx, phase in enumerate(self.phases):
+                agent_id = phase.agent_id
+                env_msgs = agent_env_messages_cache[agent_id]
+                
+                env_tokens, env_masks = self._encode_env_messages(agent_id, env_msgs, temp_env_messages[agent_id])
+                
+                agent_response_tokens[agent_id].extend(env_tokens)
+                agent_response_masks[agent_id].extend(env_masks)
             completed_turns = completed_turns + 1
         
         if mode == "Token":
+            # Extract UID from dataloader (will fail if not present)
+            uid = kwargs["uids"][env_idx]
+            
+            # Extract data_source from env if available
             data_source = "unknown"
-            uid = f"unknown_{env_idx}"
             try:
                 if hasattr(env, 'task_data') and env.task_data:
                     data_source = env.task_data["data_source"]
-                    uid = env.task_data["uid"]
                 elif hasattr(env, 'entry') and env.entry:
                     data_source = env.entry["data_source"]
-                    uid = env.entry["uid"]
             except Exception:
                 pass
 
@@ -468,6 +519,7 @@ class MultiAgentExecutionEngine:
                 "phase_data": phase_data,  # Individual phase-level data for agent training
                 "data_source": data_source,
                 "uid": uid,
+                "board_desc": env.preserved_desc,
                 "metrics": {
                     "steps": len(agents[self.phases[-1].agent_id]._trajectory.steps),
                     "phases_executed": len(self.phases),
@@ -501,84 +553,65 @@ class MultiAgentExecutionEngine:
         
         return upstream_messages
     
-    def _process_agent_tokenization(self, agent_id: str, agent: BaseAgent, agents: Dict[str, BaseAgent], mode: str, step_idx: int = 0, phase_idx: int = 0, temp_assistant_messages: List = None, temp_env_messages: List = None, current_response_token_len: int = 0) -> Tuple[List[int], List[int], bool, List[dict]]:
+    def _encode_assistant_messages(self, agent_id: str, agent: BaseAgent, mode: str, step_idx: int, phase_idx: int, temp_assistant_messages: List = None) -> Tuple[List[int], List[int], List, List]:
         """
-        Process tokenization for a specific agent and return tokens, masks, truncation status, and text logs.
+        Encode only the assistant messages for a specific agent.
         
-        Args:
-            agent_id: ID of the agent to process
-            agent: The agent instance
-            agents: Dictionary of all agents
-            mode: Execution mode ("Token" or other)
-            step_idx: Current step index for logging
-            
         Returns:
-            Tuple of (tokens, masks, is_truncated, text_logs)
+            Tuple of (assistant_tokens, assistant_masks, assistant_messages, env_messages)
         """
         from rllm.agents.utils import get_recent_assistant_messages_list, convert_messages_to_tokens_and_masks
         
         engine = self.role_engines[agent_id]
         chat_completions_messages = agent.chat_completions.copy()
-        # Get recent assistant messages based on agent's position in chain (phase_idx + 1)
         agent_position = phase_idx + 1
         assistant_messages, env_messages = get_recent_assistant_messages_list(chat_completions_messages, agent_position)
         
-        # Track messages for pretty printing (matching single agent pattern)
+        # Track messages for pretty printing
         if temp_assistant_messages is not None and assistant_messages:
             temp_assistant_messages.append("Custom Log representing message break between steps")
             temp_assistant_messages.append(assistant_messages)
-        if temp_env_messages is not None and env_messages:
-            temp_env_messages.extend(env_messages)
+        
         assert assistant_messages or mode != "Token", f"Assistant messages is empty for agent {agent_id} when accumulating token trajectories which should be conversations. This should not happen."
         assert env_messages is not None or mode != "Token", f"Environment messages is none for agent {agent_id} when accumulating token trajectories which should be conversations. This should not happen."
         
         assistant_msg_tokens, assistant_msg_masks = [], []
-        env_msg_tokens, env_msg_masks = [], []
-        
         if assistant_messages:
             assistant_msg_tokens, assistant_msg_masks = convert_messages_to_tokens_and_masks(
-                assistant_messages, 
-                tokenizer=engine.tokenizer, 
-                parser=engine.chat_parser, 
-                contains_first_msg=False, 
+                assistant_messages,
+                tokenizer=engine.tokenizer,
+                parser=engine.chat_parser,
+                contains_first_msg=False,
                 contains_generation_msg=False
             )
         
+        return assistant_msg_tokens, assistant_msg_masks, assistant_messages, env_messages
+    
+    def _encode_env_messages(self, agent_id: str, env_messages: List, temp_env_messages: List = None) -> Tuple[List[int], List[int]]:
+        """
+        Encode environment messages for a specific agent.
+        
+        Returns:
+            Tuple of (env_tokens, env_masks)
+        """
+        from rllm.agents.utils import convert_messages_to_tokens_and_masks
+        
+        engine = self.role_engines[agent_id]
+        
+        if temp_env_messages is not None and env_messages:
+            temp_env_messages.extend(env_messages)
+        
+        env_msg_tokens, env_msg_masks = [], []
         if env_messages:
             env_msg_tokens, env_msg_masks = convert_messages_to_tokens_and_masks(
-                env_messages, 
-                tokenizer=engine.tokenizer, 
-                parser=engine.chat_parser, 
-                contains_first_msg=False, 
+                env_messages,
+                tokenizer=engine.tokenizer,
+                parser=engine.chat_parser,
+                contains_first_msg=False,
                 contains_generation_msg=True
             )
         
-        combined_tokens = assistant_msg_tokens + env_msg_tokens
-        combined_masks = assistant_msg_masks + env_msg_masks
-        
-        # DIAGNOSTIC: Check mask composition
-        if env_msg_masks:
-            print(f"🔍 MULTI[{agent_id},step={step_idx}]: asst_tokens={len(assistant_msg_tokens)} env_tokens={len(env_msg_tokens)} env_mask_mean={sum(env_msg_masks)/len(env_msg_masks):.3f} | combined_mask_mean={sum(combined_masks)/len(combined_masks):.6f}")
-        
-        text_logs = []
-        
-        updated_response_token_len = current_response_token_len + len(combined_tokens)
-        if updated_response_token_len >= engine.max_response_length:
-            truncation_length = engine.max_response_length - updated_response_token_len
-            if truncation_length < 0:
-                truncated_response_tokens = combined_tokens[:truncation_length]
-                truncated_response_masks = combined_masks[:truncation_length]
-            else:
-                truncated_response_tokens = combined_tokens
-                truncated_response_masks = combined_masks
-            
-            cur_step = agent.get_current_state()
-            if updated_response_token_len - len(env_msg_tokens) > engine.max_response_length:
-                cur_step.reward = 0.0
-            cur_step.done = True
-            return truncated_response_tokens, truncated_response_masks, True, text_logs
-        
-        return combined_tokens, combined_masks, False, text_logs
+        return env_msg_tokens, env_msg_masks
                 
     async def trajectory_generator(self, reset_seed=0, timing_raw=None, mode="Token", **kwargs):
         """Generate trajectories for all environments using workflow execution"""
