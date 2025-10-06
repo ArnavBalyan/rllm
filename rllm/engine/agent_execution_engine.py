@@ -312,27 +312,7 @@ class AgentExecutionEngine:
             kwargs["max_tokens"] = max_tokens
 
             start_time = time.time()
-            # REPLAY: Use saved response if available
-            replay_data = kwargs.get("meta_info", {}).get("replay_data")
-            if idx == 0 and step_idx == 0:
-                print(f"🔍 REPLAY DEBUG: replay_data={'dict' if isinstance(replay_data, dict) else ('list' if isinstance(replay_data, list) else type(replay_data).__name__ if replay_data else None)} | len={len(replay_data) if replay_data else 0}")
-            if replay_data and idx < len(replay_data):
-                saved_chat = replay_data[idx]["chat_completions"]
-                asst_index = 2 + step_idx * 2
-                if idx == 0 and step_idx == 0:
-                    print(f"🔍 REPLAY idx={idx} step={step_idx} | asst_index={asst_index} chat_len={len(saved_chat)} | role={saved_chat[asst_index]['role'] if asst_index < len(saved_chat) else 'OUT_OF_BOUNDS'}")
-                if asst_index < len(saved_chat) and saved_chat[asst_index]["role"] == "assistant":
-                    response = saved_chat[asst_index]["content"]
-                    if step_idx == 0 and idx == 0:
-                        print(f"🔁 REPLAY: Using saved response | content_len={len(response)}")
-                else:
-                    if idx == 0 and step_idx == 0:
-                        print(f"❌ REPLAY FAIL: asst_index={asst_index} >= chat_len={len(saved_chat)} OR role!='assistant'")
-                    response = ""
-            else:
-                if idx == 0 and step_idx == 0:
-                    print(f"❌ REPLAY FAIL: replay_data={replay_data is not None} idx={idx} len={len(replay_data) if replay_data else 0}")
-                response = ""
+            response = await self.get_model_response(agent.chat_completions, **kwargs)
             delta_time = time.time() - start_time
             llm_time += delta_time
             total_time += delta_time

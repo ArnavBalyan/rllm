@@ -97,15 +97,6 @@ class AgentPPOTrainer(RayPPOTrainer):
         """
         env_args = batch.non_tensor_batch["extra_info"].tolist()
 
-        # REPLAY: Load saved chat_completions and inject board_desc
-        import os
-        replay_file = os.getenv("REPLAY_CHAT_FILE", "/home/arnav/workspace/1.jsonl")  # Default to hardcoded path
-        if replay_file and os.path.exists(replay_file):
-            with open(replay_file, 'r') as f:
-                self.replay_data = [json.loads(line) for line in f]
-            print(f"🔁 REPLAY: Loaded {len(self.replay_data)} items from {replay_file}")
-        else:
-            self.replay_data = None
 
         full_agent_args = dict(self.config.agent.get("agent_args", {})) | self.agent_args
         base_env_args = dict(self.config.env.get("env_args", {})) | self.env_args
@@ -115,8 +106,6 @@ class AgentPPOTrainer(RayPPOTrainer):
                 env_config = json.loads(env_args[i])
             else:
                 env_config = env_args[i]
-            if self.replay_data and i < len(self.replay_data) and "board_desc" in self.replay_data[i]:
-                env_config["desc"] = self.replay_data[i]["board_desc"]
             return i, self.env_class.from_dict({**env_config, **base_env_args})
 
         def _create_agent(i):
@@ -176,6 +165,7 @@ class AgentPPOTrainer(RayPPOTrainer):
             pprint(f"epoch {epoch}, step {self.global_steps} started")
             for batch_dict in self.train_dataloader:
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
+                batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))], dtype=object)
                 batch = batch.repeat(
                     repeat_times=self.config.actor_rollout_ref.rollout.n,
                     interleave=True,
@@ -189,13 +179,8 @@ class AgentPPOTrainer(RayPPOTrainer):
                 with _timer("step", timing_raw):
                     self.init_envs_and_agents(batch)
                     
-                    # Use replay data index as UID
-                    batch.non_tensor_batch["uid"] = np.array([str(i) for i in range(len(self.replay_data))], dtype=object)
-                    
-                    # Set meta_info AFTER init_envs_and_agents loads replay_data
                     batch.meta_info = {
                         "agent_rollout": True,
-                        "replay_data": getattr(self, 'replay_data', None),
                         "uids": batch.non_tensor_batch["uid"].tolist(),
                     }
 
@@ -677,18 +662,6 @@ class AgentPPOTrainer(RayPPOTrainer):
         traj_scores = [traj_scores[i] for i in sorted_indices]
         traj_uids = [traj_uids[i] for i in sorted_indices]
         
-        # LOG: Before padding
-        with open(f"/home/arnav/workspace/debug_single_before_pad_step{self.global_steps}.jsonl", 'w') as f:
-            for i in range(len(all_response_tokens_list)):
-                f.write(json.dumps({
-                    "uid": traj_uids[i],
-                    "prompt_len": len(all_initial_tokens_list[i]),
-                    "response_len": len(all_response_tokens_list[i]),
-                    "mask_len": len(all_masks_list[i]),
-                    "response_tokens": all_response_tokens_list[i].tolist(),
-                    "response_mask": all_masks_list[i].tolist(),
-                }) + "\n")
-        
         # reverse the list and create tensors, pad, then flip to achieve left padding
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
             [torch.flip(i, dims=[0]) for i in all_initial_tokens_list],
@@ -738,22 +711,6 @@ class AgentPPOTrainer(RayPPOTrainer):
             "traj_mask": traj_mask,
         }
 
-        with open(f"/home/arnav/workspace/debug_single_after_pad_step{self.global_steps}.jsonl", 'w') as f:
-            for i in range(response_batch.shape[0]):
-                f.write(json.dumps({
-                    "uid": traj_uids[i],
-                    "prompt_padded_len": prompts_batch.shape[1],
-                    "response_padded_len": response_batch.shape[1],
-                    "prompt_tokens_pad": prompts_batch[i].tolist(),
-                    "response_tokens_pad": response_batch[i].tolist(),
-                    "traj_mask_pad": traj_mask[i].tolist(),
-                    "attention_mask": attention_mask[i].tolist(),
-                    "reward_sum": score_batch[i].sum().item(),
-                }) + "\n")
-        print(f"💾 SINGLE: debug_single_before_pad_step{self.global_steps}.jsonl & debug_single_after_pad_step{self.global_steps}.jsonl")
-
-        self.visualize_trajectory(DataProto.from_dict(tensors=tensor_batch))
-        raise Exception ("Stopping here")
         return DataProto.from_dict(tensors=tensor_batch), metrics
 
     def visualize_trajectory(self, tensor_batch, sample_idx=0, max_samples=1, mask_key="traj_mask"):

@@ -204,25 +204,12 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         
         env_args = batch.non_tensor_batch["extra_info"].tolist()
         
-        # REPLAY: Load saved chat_completions and inject board_desc
-        import os
-        replay_file = os.getenv("REPLAY_CHAT_FILE", "/home/arnav/workspace/1.jsonl")  # Default to hardcoded path
-        if replay_file and os.path.exists(replay_file):
-            with open(replay_file, 'r') as f:
-                self.replay_data = [json.loads(line) for line in f]
-            print(f"🔁 MULTI REPLAY: Loaded {len(self.replay_data)} items from {replay_file}")
-        else:
-            self.replay_data = None
-        
         envs = []
         for i, env_arg in enumerate(env_args):
             if isinstance(env_arg, str):
                 env_config = json.loads(env_arg)
             else:
                 env_config = env_arg
-            # Inject replay board_desc if available
-            if self.replay_data and i < len(self.replay_data) and "board_desc" in self.replay_data[i]:
-                env_config["desc"] = self.replay_data[i]["board_desc"]
             env = self.env_class.from_dict({**env_config, **self.env_args})
             envs.append(env)
 
@@ -284,7 +271,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     f"traj/{k}_max": v_list.max(),
                 }
             )
-        raise Exception("Stopping here")
 
         return agent_batches, metrics
     
@@ -328,18 +314,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         all_masks_list = [all_masks_list[i] for i in sorted_indices]
         traj_scores = [traj_scores[i] for i in sorted_indices]
         traj_uids = [traj_uids[i] for i in sorted_indices]
-
-        # LOG: Before padding
-        with open(f"/home/arnav/workspace/debug_multi_{agent_id}_before_pad_step{self.global_steps}.jsonl", 'w') as f:
-            for i in range(len(all_response_tokens_list)):
-                f.write(json.dumps({
-                    "uid": traj_uids[i],
-                    "prompt_len": len(all_initial_tokens_list[i]),
-                    "response_len": len(all_response_tokens_list[i]),
-                    "mask_len": len(all_masks_list[i]),
-                    "response_tokens": all_response_tokens_list[i].tolist(),
-                    "response_mask": all_masks_list[i].tolist(),
-                }) + "\n")
 
         # Pad and create tensors (same logic as base class)
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
@@ -386,21 +360,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             "traj_mask": traj_mask,
         }
         
-        # LOG: After padding
-        with open(f"/home/arnav/workspace/debug_multi_{agent_id}_after_pad_step{self.global_steps}.jsonl", 'w') as f:
-            for i in range(response_batch.shape[0]):
-                f.write(json.dumps({
-                    "uid": traj_uids[i],
-                    "prompt_padded_len": prompts_batch.shape[1],
-                    "response_padded_len": response_batch.shape[1],
-                    "prompt_tokens_pad": prompts_batch[i].tolist(),
-                    "response_tokens_pad": response_batch[i].tolist(),
-                    "traj_mask_pad": traj_mask[i].tolist(),
-                    "attention_mask": attention_mask[i].tolist(),
-                    "reward_sum": score_batch[i].sum().item(),
-                }) + "\n")
-        print(f"💾 MULTI[{agent_id}]: debug_multi_{agent_id}_before/after_pad_step{self.global_steps}.jsonl")
-        
         return DataProto.from_dict(tensors=tensor_batch)
     
     def fit_multi_agent(self):
@@ -433,6 +392,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         for epoch in range(self.config.trainer.total_epochs):
             for batch_dict in self.train_dataloader:
                 batch_global: DataProto = DataProto.from_single_dict(batch_dict)
+                batch_global.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch_global.batch))], dtype=object)
                 batch_global = batch_global.repeat(
                     repeat_times=self.config.actor_rollout_ref.rollout.n,
                     interleave=True,
@@ -450,15 +410,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     
                     self.init_envs_and_agents(batch_global)
                     
-                    # Use replay data index as UID
-                    batch_global.non_tensor_batch["uid"] = np.array([str(i) for i in range(len(self.replay_data))], dtype=object)
-                    
-                    # Set meta_info AFTER init_envs_and_agents loads replay_data
                     batch_global.meta_info = {
                         "chain_of_experts_rollout": True,
                         "workflow_type": self.workflow.workflow_id,
                         "temperature": self.config.actor_rollout_ref.rollout.temperature,
-                        "replay_data": getattr(self, 'replay_data', None),
                         "uids": batch_global.non_tensor_batch["uid"].tolist(),
                     }
                     print("Batch dict 370")
@@ -672,14 +627,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
 
             records.append(rec)
 
-        out_path = "/home/ubuntu/rllm/latest.json"
-        payload = {
-            "time": datetime.utcnow().isoformat() + "Z",
-            "global_step": int(self.global_steps),
-            "records": records,
-        }
-        with open(out_path, "w") as f:
-            json.dump(payload, f)
     
     def _validate_multi_agent(self):
         if self.workflow is None:

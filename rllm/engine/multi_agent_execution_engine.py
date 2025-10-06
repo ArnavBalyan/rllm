@@ -301,26 +301,7 @@ class MultiAgentExecutionEngine:
                 prompt_msgs = agent.chat_completions.copy()
                 max_tokens = engine.max_response_length - response_token_len
         
-                replay_data = kwargs.get("replay_data")
-                if env_idx == 0 and step_idx == 0:
-                    print(f"🔍 MULTI REPLAY DEBUG[{agent_id}]: replay_data={'dict' if isinstance(replay_data, dict) else ('list' if isinstance(replay_data, list) else type(replay_data).__name__ if replay_data else None)} | len={len(replay_data) if replay_data else 0}")
-                if replay_data and env_idx < len(replay_data):
-                    saved_chat = replay_data[env_idx]["chat_completions"]
-                    asst_index = 2 + step_idx * 2
-                    if env_idx == 0 and step_idx == 0:
-                        print(f"🔍 MULTI REPLAY[{agent_id}] env={env_idx} step={step_idx} | asst_index={asst_index} chat_len={len(saved_chat)} | role={saved_chat[asst_index]['role'] if asst_index < len(saved_chat) else 'OUT_OF_BOUNDS'}")
-                    if asst_index < len(saved_chat) and saved_chat[asst_index]["role"] == "assistant":
-                        response = saved_chat[asst_index]["content"]
-                        if step_idx == 0 and env_idx == 0:
-                            print(f"🔁 MULTI REPLAY: Using saved response for {agent_id} | content_len={len(response)}")
-                    else:
-                        if env_idx == 0 and step_idx == 0:
-                            print(f"❌ MULTI REPLAY FAIL[{agent_id}]: asst_index={asst_index} >= chat_len={len(saved_chat)} OR role!='assistant'")
-                        response = ""
-                else:
-                    if env_idx == 0 and step_idx == 0:
-                        print(f"❌ MULTI REPLAY FAIL[{agent_id}]: replay_data={replay_data is not None} env_idx={env_idx} len={len(replay_data) if replay_data else 0}")
-                    response = ""
+                response = await engine.get_model_response(prompt_msgs, **kwargs, max_tokens=max_tokens)
                 
                 action = agent.complete_step_with_model_response(response)
                 action_str = action.action 
@@ -425,7 +406,7 @@ class MultiAgentExecutionEngine:
         
         if mode == "Token":
             # Extract UID from dataloader (will fail if not present)
-            uid = kwargs["uids"][env_idx]
+            uid = kwargs["meta_info"]["uids"][env_idx]
             
             # Extract data_source from env if available
             data_source = "unknown"

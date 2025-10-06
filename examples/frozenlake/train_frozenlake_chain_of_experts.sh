@@ -13,7 +13,7 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     algorithm.adv_estimator=grpo \
     data.train_batch_size=512 \
-    data.val_batch_size=4 \
+    data.val_batch_size=512 \
     data.max_prompt_length=4096 \
     data.max_response_length=2048 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
@@ -53,8 +53,8 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     algorithm.clip_advantages=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='rllm-chain-of-experts_single_agent' \
-    trainer.experiment_name='frozenlake-coe-production-8B-production' \
+    trainer.project_name='rllm-simulatd' \
+    trainer.experiment_name='chain-of-expert' \
     trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
