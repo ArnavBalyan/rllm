@@ -12,8 +12,8 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 python3 -m examples.frozenlake.train_frozenlake_agent \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=16 \
-    data.val_batch_size=16 \
+    data.train_batch_size=256 \
+    data.val_batch_size=256 \
     data.max_prompt_length=4096 \
     data.max_response_length=2048 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
@@ -42,8 +42,8 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.temperature=0.7 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
-    actor_rollout_ref.rollout.n=1 \
-    actor_rollout_ref.rollout.val_kwargs.n=1 \
+    actor_rollout_ref.rollout.n=4 \
+    actor_rollout_ref.rollout.val_kwargs.n=4 \
     actor_rollout_ref.rollout.val_kwargs.temperature=0.7 \
     actor_rollout_ref.rollout.val_kwargs.top_p=0.8 \
     actor_rollout_ref.rollout.val_kwargs.top_k=20 \
@@ -63,8 +63,8 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     trainer.save_freq=40 \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
-    trainer.rejection_sample=False \
-    trainer.rejection_sample_multiplier=2 \
+    trainer.rejection_sample=True \
+    trainer.rejection_sample_multiplier=1 \
     trainer.resume_mode=disable \
     +env.env_args.max_steps=8 \
     +env.env_args.is_slippery=False \
@@ -74,5 +74,4 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     +agent.engine_args.disable_thinking=False \
     +agent.agent_args.max_steps=10 \
     +agent.agent_args.use_accumulate_history=True \
-    +actor_rollout_ref.rollout.engine_kwargs.vllm.enable_prefix_caching=False \
-    trainer.total_epochs=1
+    trainer.total_epochs=10

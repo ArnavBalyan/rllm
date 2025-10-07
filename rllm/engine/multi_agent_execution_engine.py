@@ -300,8 +300,16 @@ class MultiAgentExecutionEngine:
                 
                 prompt_msgs = agent.chat_completions.copy()
                 max_tokens = engine.max_response_length - response_token_len
-        
-                response = await engine.get_model_response(prompt_msgs, **kwargs, max_tokens=max_tokens)
+
+                response = await engine.get_model_response(
+                    prompt_msgs, 
+                    application_id, 
+                    traj_id=env_idx,
+                    step_id=step_idx,
+                    agent_id=agent_id,
+                    max_tokens=max_tokens,
+                    **engine.sampling_params
+                )
                 
                 action = agent.complete_step_with_model_response(response)
                 action_str = action.action 
@@ -405,16 +413,17 @@ class MultiAgentExecutionEngine:
             completed_turns = completed_turns + 1
         
         if mode == "Token":
-            # Extract UID from dataloader (will fail if not present)
-            uid = kwargs["meta_info"]["uids"][env_idx]
             
             # Extract data_source from env if available
             data_source = "unknown"
+            uid = f"unknown_{env_idx}"
             try:
                 if hasattr(env, 'task_data') and env.task_data:
                     data_source = env.task_data["data_source"]
+                    uid = env.task_data["uid"]
                 elif hasattr(env, 'entry') and env.entry:
                     data_source = env.entry["data_source"]
+                    uid = env.entry["uid"]
             except Exception:
                 pass
 

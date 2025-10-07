@@ -298,6 +298,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             traj_scores.append(traj["trajectory_reward"])
             chat_completions.append({"chat_completions": traj["chat_completions"], "board_desc": workflow_result["board_desc"]})
         
+        if len(traj_scores) > 0:
+            traj_scores_array = np.array(traj_scores)
+            print(f"📈 [MULTI {agent_id}] traj_scores from engine: n={len(traj_scores)}, unique={np.unique(traj_scores_array).tolist()}, mean={traj_scores_array.mean():.3f}")
+        
         # Extract UIDs from workflow results (passed from dataloader)
         traj_uids = [workflow_result["uid"] for workflow_result in workflow_results]
 
@@ -345,10 +349,26 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         prompt_length = prompts_batch.shape[1]
         valid_response_length_sequences = attention_mask[:, prompt_length:].sum(dim=-1)
         
+        scores_placed = 0
+        last_indices = []
         for i, traj_score in enumerate(traj_scores):
             last_valid_idx = valid_response_length_sequences[i] - 1
             if last_valid_idx >= 0 and last_valid_idx < score_batch.shape[1]:
                 score_batch[i, last_valid_idx] = traj_score
+                scores_placed += 1
+                last_indices.append(last_valid_idx)
+        
+        print(f"📊 [MULTI {agent_id}] score_batch created: shape={score_batch.shape}, prompt_len={prompt_length}, "
+              f"valid_resp_lens=[min={valid_response_length_sequences.min().item()}, max={valid_response_length_sequences.max().item()}, mean={valid_response_length_sequences.float().mean().item():.1f}], "
+              f"scores_placed={scores_placed}/{len(traj_scores)}")
+        
+        attn_mean = attention_mask.float().mean().item()
+        sb_mean = score_batch.mean().item(); sb_min = score_batch.min().item(); sb_max = score_batch.max().item()
+        ts_array = np.array(traj_scores)
+        ts_mean, ts_min, ts_max = ts_array.mean(), ts_array.min(), ts_array.max()
+        li_tensor = torch.tensor(last_indices)
+        li_mean, li_min, li_max = li_tensor.float().mean().item(), int(li_tensor.min()), int(li_tensor.max())
+        print(f"📊 [MULTI {agent_id}] attn_mean={attn_mean:.3f} | score_batch[min={sb_min:.1f}, max={sb_max:.1f}, mean={sb_mean:.3f}] | traj_scores[min={ts_min:.1f}, max={ts_max:.1f}, mean={ts_mean:.3f}] | last_idx[min={li_min}, max={li_max}, mean={li_mean:.1f}]")
         
         tensor_batch = {
             "input_ids": trajectory_batch,
@@ -434,15 +454,21 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         print(f"Processing agent: {agent_id}")
                         
                         local_batch = final_gen_batch_output[agent_id]
-                        
-                        batch = type(batch_global)(
-                            batch=batch_global.batch.clone(),
-                            non_tensor_batch=deepcopy(batch_global.non_tensor_batch),
-                            meta_info=deepcopy(batch_global.meta_info)
-                        )
+
+                        # batch = type(batch_global)(
+                        #     batch=batch_global.batch.clone(),
+                        #     non_tensor_batch=deepcopy(batch_global.non_tensor_batch),
+                        #     meta_info=deepcopy(batch_global.meta_info)
+                        # )
+                        batch = batch_global
+                        # Todo: Revert to cloning it in multi agent once we get there, for now this should work for a single agent.
+
                         batch = batch.union(local_batch)
                         # generate_metrics is a single dict of trajectory metrics, not per-agent
                         metrics_global[agent_id].update(generate_metrics)
+
+                        # Mark that at least one agent has valid data this iteration
+                        processed_any = True
                     
                         if self.use_critic:
                             with _timer("values", timing_raw):
@@ -456,18 +482,26 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                                 reward_tensor = self.rm_wg.compute_rm_score(batch)
                                 batch = batch.union(reward_tensor)
                         
+                        
                             if "token_level_scores" not in batch.batch:
+                                print(f"💰 [MULTI {agent_id}] Computing rewards with reward_fn={self.reward_fn.__class__.__name__}, batch_size={len(batch.batch['input_ids'])}")
                                 reward_tensor = self.reward_fn(batch)
                                 batch.batch["token_level_scores"] = reward_tensor
+                                reward_source = "computed"
                             else:
                                 reward_tensor = batch.batch["token_level_scores"]
+                                reward_source = "pre-computed"
+                            
+                            # Log reward tensor details
+                            seq_rewards = reward_tensor.sum(-1)  # Sum per sequence
+                            unique_rewards = torch.unique(seq_rewards)
+                            print(f"💰 [MULTI {agent_id}] Rewards ({reward_source}): shape={reward_tensor.shape}, seq_sum range=[{seq_rewards.min():.2f}, {seq_rewards.max():.2f}], unique={unique_rewards.tolist()}")
                                                 
                             uids = batch.non_tensor_batch["uid"]
                             unique_uids = np.unique(uids)
                             valid_mask = torch.ones(len(uids), dtype=torch.bool)
                             solve_none = 0
                             solve_all = 0
-                            solve_none = 0
                             for uid in unique_uids:
                                 uid_mask = uids == uid
                                 uid_rewards = reward_tensor[uid_mask].sum(-1) 
@@ -478,20 +512,50 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                                     valid_mask[uid_mask] = False
                                     solve_all += 1
 
+                            solve_partial = len(unique_uids) - solve_none - solve_all
                             metrics_global[agent_id]["batch/solve_none"] = solve_none
                             metrics_global[agent_id]["batch/solve_all"] = solve_all
-                            metrics_global[agent_id]["batch/solve_partial"] = len(unique_uids) - solve_none - solve_all
+                            metrics_global[agent_id]["batch/solve_partial"] = solve_partial
                             
-                            batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
+                            # Apply rejection sampling filter (keep only partial samples)
+                            if self.config.trainer.rejection_sample:
+                                # Log full-score BEFORE filtering (to track actual model performance)
+                                full_sequence_score = reward_tensor.sum(-1)
+                                metrics_global[agent_id]["critic/full-score/mean"] = torch.mean(full_sequence_score).detach().item()
+                                metrics_global[agent_id]["critic/full-score/max"] = torch.max(full_sequence_score).detach().item()
+                                metrics_global[agent_id]["critic/full-score/min"] = torch.min(full_sequence_score).detach().item()
+                                
+                                original_batch_size = len(uids)
+                                num_kept = valid_mask.sum().item()
+                                num_rejected = original_batch_size - num_kept
+                                print(f"🎲 [{agent_id}] Rejection sampling: UIDs={len(unique_uids)} (none={solve_none}, all={solve_all}, partial={solve_partial}) | Samples: original={original_batch_size}, kept={num_kept}, rejected={num_rejected} ({100*num_rejected/original_batch_size:.1f}%)")
+
+                                # Skip batch if no valid samples remain
+                                if not valid_mask.any():
+                                    print(f"⚠️ Skipping batch for {agent_id}: no valid samples after rejection sampling")
+                                    continue
+                                
+                                # Filter batch to keep only partial samples
+                                batch = batch[valid_mask]
+                                
+                                # Round down to nearest multiple of world size (matching single-agent)
+                                num_trainer_replicas = self.actor_rollout_wg.world_size
+                                max_batch_size = (batch.batch["input_ids"].shape[0] // num_trainer_replicas) * num_trainer_replicas
+                                if not max_batch_size:
+                                    # All samples filtered out
+                                    print(f"⚠️ Skipping {agent_id}: batch too small after rejection sampling")
+                                    continue
+                                
+                                size_mask = torch.zeros(batch.batch["input_ids"].shape[0], dtype=torch.bool)
+                                size_mask[:max_batch_size] = True
+                                batch = batch[size_mask]
 
                             with _timer("old_log_prob", timing_raw):
                                 agent_worker_group = self.agent_rollout_engines[agent_id].worker_group
-                                print(f"Agent {agent_id} world_size: {agent_worker_group.world_size}")
-                                print(f"Helper rollout_wg world_size: {getattr(self, 'rollout_wg', None) and self.rollout_wg.world_size}")
-                                print(f"Helper actor_rollout_wg world_size: {getattr(self, 'actor_rollout_wg', None) and self.actor_rollout_wg.world_size}")
-
                                 old_log_prob = agent_worker_group.compute_log_prob(batch)
                                 batch = batch.union(old_log_prob)
+
+                            batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
 
                             batch = compute_advantage(
                                 batch,
@@ -528,6 +592,12 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                                 
                             actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                             metrics_global[agent_id].update(actor_output_metrics)
+                                                        # Sync updated weights to rollout workers (same as RayPPOAsyncTrainer lines 262-266)
+                            updated_actor_state_dict_ref = agent_worker_group.get_state_dict()
+                            if isinstance(updated_actor_state_dict_ref, list):
+                                updated_actor_state_dict_ref = updated_actor_state_dict_ref[0]
+                            agent_worker_group.update_rollout_actor_module(updated_actor_state_dict_ref)
+
                         print("actor update complete")
                 
                     if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
@@ -542,6 +612,11 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         with _timer("save_checkpoint", timing_raw):
                             self._save_checkpoint()
                     print("Checkpoint saved")
+                # If every agent was skipped by rejection sampling pull a new env batch
+                if self.config.trainer.rejection_sample and not processed_any:
+                    print("⚠️ All agents skipped – pulling a new env batch")
+                    continue
+
                 # Collect and log metrics
                 metrics_global.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics_global.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))

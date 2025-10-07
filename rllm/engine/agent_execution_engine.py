@@ -312,7 +312,14 @@ class AgentExecutionEngine:
             kwargs["max_tokens"] = max_tokens
 
             start_time = time.time()
-            response = await self.get_model_response(agent.chat_completions, **kwargs)
+            response = await self.get_model_response(
+                prompt_messages, 
+                application_id, 
+                traj_id=idx,
+                step_id=step_idx,
+                agent_id="single_agent",  # For single agent, we can use a default
+                **kwargs
+            )
             delta_time = time.time() - start_time
             llm_time += delta_time
             total_time += delta_time
@@ -486,38 +493,17 @@ class AgentExecutionEngine:
         if mode == "Text":
             return trajectory
         elif mode == "Token":
-            # Extract UID from dataloader (will fail if not present)
-            uid = kwargs["meta_info"]["uids"][idx]
             
             # Extract data_source from env if available
             data_source = "unknown"
+            uid = f"unknown_{env.idx}"
             if hasattr(env, 'task_data') and env.task_data:
                 data_source = env.task_data.get("data_source", "unknown")
+                uid = env.task_data.get("uid", f"unknown_{env.idx}")
             elif hasattr(env, 'entry') and env.entry:
                 data_source = env.entry.get("data_source", "unknown")
+                uid = env.entry.get("uid", f"unknown_{env.idx}")
             
-            # Stream collected tokenization messages for this trajectory
-            import json
-            import os
-            tokenization_log_entry = {
-                "traj_id": idx,
-                "agent_id": "single_agent", 
-                "application_id": application_id,
-                "temp_assistant_messages": temp_assistant_message,
-                "temp_env_messages": temp_env_messages,
-                "trajectory_reward": trajectory.reward,
-                "total_steps": len(trajectory.steps),
-                "timestamp": time.time()
-            }
-            
-            # Create logs directory if it doesn't exist  
-            # log_dir = "/workspace/model_response_logs"
-            # os.makedirs(log_dir, exist_ok=True)
-            # log_file = os.path.join(log_dir, "tokenization_messages.jsonl")
-            
-            # # Append to JSONL file
-            # with open(log_file, "a") as f:
-            #     f.write(json.dumps(tokenization_log_entry) + "\n")
 
             token_result = {
                 "prompt_tokens": torch.tensor(prompt_tokens, dtype=torch.long),
@@ -529,7 +515,6 @@ class AgentExecutionEngine:
                 "response_text_log": response_text_log,
                 "data_source": data_source,
                 "uid": uid,
-                "board_desc": env.preserved_desc,
                 "metrics": {
                     "steps": len(trajectory.steps),
                     "reward_time": reward_time,

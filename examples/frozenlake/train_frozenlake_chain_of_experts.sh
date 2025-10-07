@@ -12,8 +12,8 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=512 \
-    data.val_batch_size=512 \
+    data.train_batch_size=256 \
+    data.val_batch_size=256 \
     data.max_prompt_length=4096 \
     data.max_response_length=2048 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
@@ -42,19 +42,21 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.temperature=0.7 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
-    actor_rollout_ref.rollout.n=1 \
-    actor_rollout_ref.rollout.val_kwargs.n=1 \
+    actor_rollout_ref.rollout.n=4 \
+    actor_rollout_ref.rollout.val_kwargs.n=4 \
     actor_rollout_ref.rollout.val_kwargs.temperature=0.7 \
     actor_rollout_ref.rollout.val_kwargs.top_p=0.8 \
     actor_rollout_ref.rollout.val_kwargs.top_k=20 \
-    actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.actor.entropy_coeff=0 \
     algorithm.kl_ctrl.kl_coef=0.001 \
     algorithm.mask_truncated_samples=False \
     algorithm.clip_advantages=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='rllm-simulatd' \
-    trainer.experiment_name='chain-of-expert' \
+    trainer.project_name='rllm-coe' \
+    trainer.experiment_name='frozenlake-prod' \
     trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
@@ -62,8 +64,8 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     +multi_agent.reward_mode=complete \
     trainer.test_freq=10 \
     trainer.default_hdfs_dir=null \
-    trainer.rejection_sample=False \
-    trainer.rejection_sample_multiplier=16 \
+    trainer.rejection_sample=True \
+    trainer.rejection_sample_multiplier=1 \
     +env.env_args.max_steps=10 \
     +env.env_args.is_slippery=False \
     agent.max_steps=10 \
@@ -72,7 +74,7 @@ python3 -m examples.frozenlake.train_frozenlake_chain_of_experts \
     +agent.engine_args.disable_thinking=False \
     +agent.agent_args.max_steps=10 \
     +agent.agent_args.use_accumulate_history=True \
-    actor_rollout_ref.rollout.max_num_batched_tokens=6144 \
+    +actor_rollout_ref.rollout.engine_kwargs.vllm.enable_prefix_caching=False \
     trainer.total_epochs=10
 
 echo "FrozenLake Multi-Agent training completed!" 

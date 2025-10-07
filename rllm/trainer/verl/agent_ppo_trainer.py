@@ -103,10 +103,8 @@ class AgentPPOTrainer(RayPPOTrainer):
 
         def _create_env(i):
             if isinstance(env_args[i], str):
-                env_config = json.loads(env_args[i])
-            else:
-                env_config = env_args[i]
-            return i, self.env_class.from_dict({**env_config, **base_env_args})
+                env_args[i] = json.loads(env_args[i])
+            return i, self.env_class.from_dict({**env_args[i], **base_env_args})
 
         def _create_agent(i):
             return i, self.agent_class(**full_agent_args)
@@ -151,12 +149,12 @@ class AgentPPOTrainer(RayPPOTrainer):
         import time
 
         start_time = time.time()
-        # if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
-            # val_metrics = self._validate_agent()
-            # pprint(f"Initial validation metrics: {val_metrics}")
-            # logger.log(data=val_metrics, step=self.global_steps)
-            # if self.config.trainer.get("val_only", False):
-                # return
+        if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
+            val_metrics = self._validate_agent()
+            pprint(f"Initial validation metrics: {val_metrics}")
+            logger.log(data=val_metrics, step=self.global_steps)
+            if self.config.trainer.get("val_only", False):
+                return
         print(f"Time taken to validate agent: {time.time() - start_time}")
         # we start from step 1
         self.global_steps += 1
@@ -212,10 +210,18 @@ class AgentPPOTrainer(RayPPOTrainer):
 
                         # reward tensor for env-based trajectory data can be obtained by processing the trajectories
                         if "token_level_scores" not in batch.batch:
+                            print(f"💰 [SINGLE] Computing rewards with reward_fn={self.reward_fn.__class__.__name__}, batch_size={len(batch.batch['input_ids'])}")
                             reward_tensor = self.reward_fn(batch)
                             batch.batch["token_level_scores"] = reward_tensor
+                            reward_source = "computed"
                         else:
                             reward_tensor = batch.batch["token_level_scores"]  # filled in by environment collected trajectory transformation
+                            reward_source = "pre-computed"
+                        
+                        # Log reward tensor details
+                        seq_rewards = reward_tensor.sum(-1)  # Sum per sequence
+                        unique_rewards = torch.unique(seq_rewards)
+                        print(f"💰 [SINGLE] Rewards ({reward_source}): shape={reward_tensor.shape}, seq_sum range=[{seq_rewards.min():.2f}, {seq_rewards.max():.2f}], unique={unique_rewards.tolist()}")
 
                         # Rejection sampling based on rewards
                         # Group rewards by uid
@@ -237,9 +243,11 @@ class AgentPPOTrainer(RayPPOTrainer):
                                 solve_all += 1
 
                         # Log to metrics
+                        solve_partial = len(unique_uids) - solve_none - solve_all
                         metrics["batch/solve_none"] = solve_none
                         metrics["batch/solve_all"] = solve_all
-                        metrics["batch/solve_partial"] = len(unique_uids) - solve_none - solve_all
+                        metrics["batch/solve_partial"] = solve_partial
+
 
                         if self.config.trainer.rejection_sample:
                             # log the actual complete training rewards before rejection sampling
@@ -258,6 +266,12 @@ class AgentPPOTrainer(RayPPOTrainer):
                             metrics["critic/full-score/mean"] = torch.mean(full_sequence_score).detach().item()
                             metrics["critic/full-score/max"] = torch.max(full_sequence_score).detach().item()
                             metrics["critic/full-score/min"] = torch.min(full_sequence_score).detach().item()
+                            # Log rejection sampling statistics with solve breakdown
+                            original_batch_size = len(uids)
+                            num_kept = valid_mask.sum().item()
+                            num_rejected = original_batch_size - num_kept
+                            print(f"🎲 Rejection sampling: UIDs={len(unique_uids)} (none={solve_none}, all={solve_all}, partial={solve_partial}) | Samples: original={original_batch_size}, kept={num_kept}, rejected={num_rejected} ({100*num_rejected/original_batch_size:.1f}%)")
+
 
                             # If no valid samples remain, skip this batch and get a new one
                             if not valid_mask.any():
@@ -282,7 +296,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                                 non_last_step_batch = batch.select_idxs(not_last_step_indices)
 
                                 # filter last_step_batch to make sure its multiple of world size
-                                num_trainer_replicas = self._get_actor_rollout_world_size()
+                                num_trainer_replicas = self.actor_rollout_wg.world_size
                                 max_batch_size = (
                                     last_step_batch.batch["input_ids"].shape[0]  # 1 per trajectory
                                     // num_trainer_replicas
@@ -306,7 +320,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                                 batch = self._pad_dataproto_to_world_size(batch)
                             else:
                                 # Round down to the nearest multiple of world size
-                                num_trainer_replicas = self._get_actor_rollout_world_size()
+                                num_trainer_replicas = self.actor_rollout_wg.world_size
                                 max_batch_size = (batch.batch["input_ids"].shape[0] // num_trainer_replicas) * num_trainer_replicas
                                 if not max_batch_size:
                                     # give up, you got everything either all wrong or right.
@@ -412,14 +426,14 @@ class AgentPPOTrainer(RayPPOTrainer):
                         metrics.update(actor_output_metrics)
 
                     # validate
-                    # if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
-                        # with _timer("testing", timing_raw):
-                            # val_metrics: dict = self._validate_agent()
-                        # metrics.update(val_metrics)
+                    if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
+                        with _timer("testing", timing_raw):
+                            val_metrics: dict = self._validate_agent()
+                        metrics.update(val_metrics)
 
-                    # if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
-                        # with _timer("save_checkpoint", timing_raw):
-                            # self._save_checkpoint()
+                    if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
+                        with _timer("save_checkpoint", timing_raw):
+                            self._save_checkpoint()
 
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
@@ -430,13 +444,13 @@ class AgentPPOTrainer(RayPPOTrainer):
 
                 self.global_steps += 1
 
-                # if self.global_steps >= self.total_training_steps:
+                if self.global_steps >= self.total_training_steps:
                     # perform validation after training
-                    # if self.val_reward_fn is not None:
-                        # val_metrics = self._validate_agent()
-                        # pprint(f"Final validation metrics: {val_metrics}")
-                        # logger.log(data=val_metrics, step=self.global_steps)
-                    # return
+                    if self.val_reward_fn is not None:
+                        val_metrics = self._validate_agent()
+                        pprint(f"Final validation metrics: {val_metrics}")
+                        logger.log(data=val_metrics, step=self.global_steps)
+                    return
 
     def _validate_agent(self):
         rewards_lst = []
@@ -623,12 +637,15 @@ class AgentPPOTrainer(RayPPOTrainer):
             all_response_tokens_list.append(response_tokens)
             all_masks_list.append(traj["response_masks"])
             traj_scores.append(traj["trajectory_reward"])
-            # chat_completions.append(traj["chat_completions"])
-            chat_completions.append({"chat_completions": traj["chat_completions"], "board_desc": traj["board_desc"]})
+            chat_completions.append(traj["chat_completions"])
             traj_metrics.append(traj["metrics"])
         
-        # Extract UIDs from trajectories (passed from dataloader)
-        traj_uids = [traj["uid"] for traj in trajectories]
+        
+        # Log trajectory reward statistics ONCE
+        if len(traj_scores) > 0:
+            traj_scores_array = np.array(traj_scores)
+            print(f"📈 [SINGLE] traj_scores from engine: n={len(traj_scores)}, unique={np.unique(traj_scores_array).tolist()}, mean={traj_scores_array.mean():.3f}")
+        
 
         # Flatten traj_metrics into a dict of lists
         traj_metrics = {k: [d[k] for d in traj_metrics] for k in traj_metrics[0]}
@@ -654,13 +671,6 @@ class AgentPPOTrainer(RayPPOTrainer):
             for chat_completion in chat_completions:
                 f.write(json.dumps(chat_completion) + "\n")
         
-        # Sort all lists by uid for stable comparison with multi-agent
-        sorted_indices = sorted(range(len(traj_uids)), key=lambda i: traj_uids[i])
-        all_initial_tokens_list = [all_initial_tokens_list[i] for i in sorted_indices]
-        all_response_tokens_list = [all_response_tokens_list[i] for i in sorted_indices]
-        all_masks_list = [all_masks_list[i] for i in sorted_indices]
-        traj_scores = [traj_scores[i] for i in sorted_indices]
-        traj_uids = [traj_uids[i] for i in sorted_indices]
         
         # reverse the list and create tensors, pad, then flip to achieve left padding
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
@@ -696,10 +706,27 @@ class AgentPPOTrainer(RayPPOTrainer):
         prompt_length = prompts_batch.shape[1]
         valid_response_length_sequences = attention_mask[:, prompt_length:].sum(dim=-1)
 
+        scores_placed = 0
+        last_indices = []
         for i, traj_score in enumerate(traj_scores):
             last_valid_idx = valid_response_length_sequences[i] - 1
             if last_valid_idx >= 0 and last_valid_idx < score_batch.shape[1]:
                 score_batch[i, last_valid_idx] = traj_score
+                scores_placed += 1
+            last_indices.append(last_valid_idx)
+        
+        # Log score_batch creation characteristics
+        print(f"📊 [SINGLE] score_batch created: shape={score_batch.shape}, prompt_len={prompt_length}, "
+              f"valid_resp_lens=[min={valid_response_length_sequences.min().item()}, max={valid_response_length_sequences.max().item()}, mean={valid_response_length_sequences.float().mean().item():.1f}], "
+              f"scores_placed={scores_placed}/{len(traj_scores)}")
+        # NEW concise stats log
+        attn_mean = attention_mask.float().mean().item()
+        sb_mean = score_batch.mean().item(); sb_min = score_batch.min().item(); sb_max = score_batch.max().item()
+        ts_array = np.array(traj_scores)
+        ts_mean, ts_min, ts_max = ts_array.mean(), ts_array.min(), ts_array.max()
+        li_tensor = torch.tensor(last_indices)
+        li_mean, li_min, li_max = li_tensor.float().mean().item(), int(li_tensor.min()), int(li_tensor.max())
+        print(f"📊 [SINGLE] attn_mean={attn_mean:.3f} | score_batch[min={sb_min:.1f}, max={sb_max:.1f}, mean={sb_mean:.3f}] | traj_scores[min={ts_min:.1f}, max={ts_max:.1f}, mean={ts_mean:.3f}] | last_idx[min={li_min}, max={li_max}, mean={li_mean:.1f}]")
 
         tensor_batch = {
             "input_ids": trajectory_batch,
@@ -710,6 +737,8 @@ class AgentPPOTrainer(RayPPOTrainer):
             "token_level_scores": score_batch,
             "traj_mask": traj_mask,
         }
+
+        self.visualize_trajectory(DataProto.from_dict(tensors=tensor_batch))
 
         return DataProto.from_dict(tensors=tensor_batch), metrics
 
@@ -979,14 +1008,14 @@ class AgentPPOTrainer(RayPPOTrainer):
         other_step_batch.batch["advantages"] = final_advantage
         other_step_batch.batch["returns"] = final_advantage
 
-    def _get_actor_rollout_world_size(self):
-        """Return actor rollout world size for both RayWorkerGroup and AsyncLLMServerManager."""
-        if hasattr(self.actor_rollout_wg, "world_size"):
-            return self.actor_rollout_wg.world_size
-        if hasattr(self.actor_rollout_wg, "worker_group") and hasattr(self.actor_rollout_wg.worker_group, "world_size"):
-            return self.actor_rollout_wg.worker_group.world_size
-        # default single worker
-        return 1
+    # def _get_actor_rollout_world_size(self):
+    #     """Return actor rollout world size for both RayWorkerGroup and AsyncLLMServerManager."""
+    #     if hasattr(self.actor_rollout_wg, "world_size"):
+    #         return self.actor_rollout_wg.world_size
+    #     if hasattr(self.actor_rollout_wg, "worker_group") and hasattr(self.actor_rollout_wg.worker_group, "world_size"):
+    #         return self.actor_rollout_wg.worker_group.world_size
+    #     # default single worker
+    #     return 1
 
     def _pad_dataproto_to_world_size(self, batch):
         world_sizes = []
@@ -997,9 +1026,9 @@ class AgentPPOTrainer(RayPPOTrainer):
         if self.use_rm and self.rm_wg.world_size != 0:
             world_sizes.append(self.rm_wg.world_size)
         if self.hybrid_engine:
-            ar_ws = self._get_actor_rollout_world_size()
-            if ar_ws:
-                world_sizes.append(ar_ws)
+            print("Printing self.actor_rollout_wg.world_size: ", self.actor_rollout_wg.world_size)
+            if self.actor_rollout_wg.world_size != 0:
+                world_sizes.append(self.actor_rollout_wg.world_size)
         else:
             if self.actor_wg.world_size != 0:
                 world_sizes.append(self.actor_wg.world_size)
@@ -1013,12 +1042,12 @@ class AgentPPOTrainer(RayPPOTrainer):
         original_batch_size = batch.batch["prompts"].shape[0]
         batch, pad_size = pad_dataproto_to_divisor(batch, world_size)
 
-        # Initialize missing keys if they don't exist
-        if "is_last_step" not in batch.non_tensor_batch:
-            # For multi-agent Chain of Experts, all trajectories are complete episodes (last steps)
-            batch.non_tensor_batch["is_last_step"] = np.array([True] * batch.batch["prompts"].shape[0])
-        if "is_pad_step" not in batch.non_tensor_batch:
-            batch.non_tensor_batch["is_pad_step"] = np.array([False] * batch.batch["prompts"].shape[0])
+        # # Initialize missing keys if they don't exist
+        # if "is_last_step" not in batch.non_tensor_batch:
+        #     # For multi-agent Chain of Experts, all trajectories are complete episodes (last steps)
+        #     batch.non_tensor_batch["is_last_step"] = np.array([True] * batch.batch["prompts"].shape[0])
+        # if "is_pad_step" not in batch.non_tensor_batch:
+        #     batch.non_tensor_batch["is_pad_step"] = np.array([False] * batch.batch["prompts"].shape[0])
 
         # for the padded dataproto, make the traj mask to 0. is_last_step also False
         for i in range(pad_size):
