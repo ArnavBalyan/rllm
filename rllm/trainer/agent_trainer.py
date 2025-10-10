@@ -43,10 +43,45 @@ class AgentTrainer:
 
         self.config = config
 
+
+        print(f"\n🔍 [AGENT TRAINER] Initialization:")
+        print(f"  train_dataset = {train_dataset}")
+        print(f"  val_dataset = {val_dataset}")
+        print(f"  train_dataset is not None? {train_dataset is not None}")
+        print(f"  val_dataset is not None? {val_dataset is not None}")
+        
+        if train_dataset is not None:
+            verl_path = train_dataset.get_verl_data_path()
+            print(f"  train_dataset.get_verl_data_path() = {verl_path}")
+            
+        if val_dataset is not None:
+            verl_path_val = val_dataset.get_verl_data_path()
+            print(f"  val_dataset.get_verl_data_path() = {verl_path_val}")
+        
+        # Show original config paths
+        if self.config is not None and hasattr(self.config, "data"):
+            print(f"  BEFORE modification:")
+            print(f"    config.data.train_files = {self.config.data.train_files}")
+            print(f"    config.data.val_files = {self.config.data.val_files}")
+        
         if train_dataset is not None and self.config is not None and hasattr(self.config, "data"):
             self.config.data.train_files = train_dataset.get_verl_data_path()
+            print(f"  ✅ MODIFIED config.data.train_files to: {self.config.data.train_files}")
+        else:
+            print(f"  ℹ️ NOT modifying config.data.train_files (train_dataset is None)")
+            
         if val_dataset is not None and self.config is not None and hasattr(self.config, "data"):
             self.config.data.val_files = val_dataset.get_verl_data_path()
+            print(f"  ✅ MODIFIED config.data.val_files to: {self.config.data.val_files}")
+        else:
+            print(f"  ℹ️ NOT modifying config.data.val_files (val_dataset is None)")
+            
+        # Show final config paths
+        if self.config is not None and hasattr(self.config, "data"):
+            print(f"  AFTER modification:")
+            print(f"    config.data.train_files = {self.config.data.train_files}")
+            print(f"    config.data.val_files = {self.config.data.val_files}")
+        print()
 
     def train(self):
         if not ray.is_initialized():

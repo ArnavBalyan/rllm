@@ -313,11 +313,10 @@ class AgentExecutionEngine:
 
             start_time = time.time()
             response = await self.get_model_response(
-                prompt_messages, 
-                application_id, 
+                prompt_messages,
+                application_id,
                 traj_id=idx,
                 step_id=step_idx,
-                agent_id="single_agent",  # For single agent, we can use a default
                 **kwargs
             )
             delta_time = time.time() - start_time
@@ -432,7 +431,7 @@ class AgentExecutionEngine:
                 cur_step.done = done
                 break
 
-            print(f"🔍 SINGLE[traj={idx},step={step_idx}]: BEFORE done check | done={done} env_msg_tokens={len(env_msg_tokens)} env_msg_masks={len(env_msg_masks)}")
+            # print(f"🔍 SINGLE[traj={idx},step={step_idx}]: BEFORE done check | done={done} env_msg_tokens={len(env_msg_tokens)} env_msg_masks={len(env_msg_masks)}")
             # Check if episode is done
             if done:
                 termination_reason = "ENV_DONE"
@@ -441,8 +440,8 @@ class AgentExecutionEngine:
             response_tokens.extend(env_msg_tokens)
             response_masks.extend(env_msg_masks)
             # DIAGNOSTIC: Check mask composition after adding env tokens
-            if env_msg_masks:
-                print(f"🔍 SINGLE[traj={idx},step={step_idx}]: added env_tokens={len(env_msg_tokens)} env_mask_mean={sum(env_msg_masks)/len(env_msg_masks):.3f} | total_mask_mean={sum(response_masks)/len(response_masks):.6f} total_len={len(response_masks)}")
+            # if env_msg_masks:
+                # print(f"🔍 SINGLE[traj={idx},step={step_idx}]: added env_tokens={len(env_msg_tokens)} env_mask_mean={sum(env_msg_masks)/len(env_msg_masks):.3f} | total_mask_mean={sum(response_masks)/len(response_masks):.6f} total_len={len(response_masks)}")
             # Log environment messages
             if env_messages:
                 for env_msg in env_messages:

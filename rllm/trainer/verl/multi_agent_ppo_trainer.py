@@ -227,22 +227,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             )
         agent_batches = {}
         metrics = {}
-        # Save multi-agent response text logs to understand tokenization
-        import os, json
-        save_dir = os.path.join(self.config.trainer.default_local_dir, "multi_agent_response_text_logs")
-        os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, f"{getattr(self, 'global_steps', 0)}.jsonl"), "w") as f:
-            for traj in workflow_results:
-                if "phase_data" in traj:
-                    for agent_id, phase_info in traj["phase_data"].items():
-                        if "response_text_log" in phase_info:
-                            log_entry = {
-                                "idx": traj.get("idx", "unknown"), 
-                                "uid": traj.get("uid", "unknown"),
-                                "agent_id": agent_id,
-                                "response_text_log": phase_info["response_text_log"]
-                            }
-                            f.write(json.dumps(log_entry) + "\n")
 
         with _timer("transform_chain_of_experts_trajectories", timing_raw):
             agent_ids = [cfg.agent_id for cfg in self.workflow.agent_configs_list]
@@ -290,7 +274,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             prompt_tokens = traj["prompt_tokens"]
             response_tokens = traj["response_tokens"]
             
-            
             assert prompt_tokens.numel() != 0 and response_tokens.numel() != 0, f"Both prompt {prompt_tokens.numel()} and response {response_tokens.numel()} of trajectory shouldn't be empty. Please check make sure environment is working and the config"
             all_initial_tokens_list.append(prompt_tokens)
             all_response_tokens_list.append(response_tokens)
@@ -302,22 +285,11 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             traj_scores_array = np.array(traj_scores)
             print(f"📈 [MULTI {agent_id}] traj_scores from engine: n={len(traj_scores)}, unique={np.unique(traj_scores_array).tolist()}, mean={traj_scores_array.mean():.3f}")
         
-        # Extract UIDs from workflow results (passed from dataloader)
-        traj_uids = [workflow_result["uid"] for workflow_result in workflow_results]
-
         save_dir = os.path.join(self.config.trainer.default_local_dir, f"chat_completions/{agent_id}")
         os.makedirs(save_dir, exist_ok=True)
         with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
             for chat_completion in chat_completions:
                 f.write(json.dumps(chat_completion) + "\n")
-
-        # Sort all lists by uid for stable comparison with single-agent
-        sorted_indices = sorted(range(len(traj_uids)), key=lambda i: traj_uids[i])
-        all_initial_tokens_list = [all_initial_tokens_list[i] for i in sorted_indices]
-        all_response_tokens_list = [all_response_tokens_list[i] for i in sorted_indices]
-        all_masks_list = [all_masks_list[i] for i in sorted_indices]
-        traj_scores = [traj_scores[i] for i in sorted_indices]
-        traj_uids = [traj_uids[i] for i in sorted_indices]
 
         # Pad and create tensors (same logic as base class)
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
@@ -350,25 +322,44 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         valid_response_length_sequences = attention_mask[:, prompt_length:].sum(dim=-1)
         
         scores_placed = 0
-        last_indices = []
+        # last_indices = []
         for i, traj_score in enumerate(traj_scores):
             last_valid_idx = valid_response_length_sequences[i] - 1
             if last_valid_idx >= 0 and last_valid_idx < score_batch.shape[1]:
                 score_batch[i, last_valid_idx] = traj_score
                 scores_placed += 1
-                last_indices.append(last_valid_idx)
+            #     last_indices.append(last_valid_idx)
+            #                     # 🔍 DEBUG: Show decoded text for first 2 samples
+            #     if i < 3:
+            #         score_val = traj_score.item() if hasattr(traj_score, 'item') else float(traj_score)
+            #         prompt_text = self.tokenizer.decode(prompts_batch[i], skip_special_tokens=False)
+            #         response_text = self.tokenizer.decode(response_batch[i][:last_valid_idx+1], skip_special_tokens=False)
+            #         print(f"\n{'='*80}")
+            #         print(f"🔍 [{agent_id}] Sample {i} - Score Placement Debug")
+            #         print(f"{'='*80}")
+            #         print(f"📝 PROMPT ({prompt_length} tokens):")
+            #         print(f"   {prompt_text}")
+            #         print(f"\n💬 RESPONSE ({last_valid_idx+1} tokens):")
+            #         print(f"   {response_text}")
+            #         print(f"\n📊 SCORE INFO:")
+            #         print(f"   • Score value: {score_val:.4f}")
+            #         print(f"   • Placed at index: {last_valid_idx}")
+            #         print(f"   • Valid response length: {valid_response_length_sequences[i].item()}")
+            #         print(f"{'='*80}\n")
+        
+
         
         print(f"📊 [MULTI {agent_id}] score_batch created: shape={score_batch.shape}, prompt_len={prompt_length}, "
               f"valid_resp_lens=[min={valid_response_length_sequences.min().item()}, max={valid_response_length_sequences.max().item()}, mean={valid_response_length_sequences.float().mean().item():.1f}], "
               f"scores_placed={scores_placed}/{len(traj_scores)}")
         
-        attn_mean = attention_mask.float().mean().item()
-        sb_mean = score_batch.mean().item(); sb_min = score_batch.min().item(); sb_max = score_batch.max().item()
-        ts_array = np.array(traj_scores)
-        ts_mean, ts_min, ts_max = ts_array.mean(), ts_array.min(), ts_array.max()
-        li_tensor = torch.tensor(last_indices)
-        li_mean, li_min, li_max = li_tensor.float().mean().item(), int(li_tensor.min()), int(li_tensor.max())
-        print(f"📊 [MULTI {agent_id}] attn_mean={attn_mean:.3f} | score_batch[min={sb_min:.1f}, max={sb_max:.1f}, mean={sb_mean:.3f}] | traj_scores[min={ts_min:.1f}, max={ts_max:.1f}, mean={ts_mean:.3f}] | last_idx[min={li_min}, max={li_max}, mean={li_mean:.1f}]")
+        # attn_mean = attention_mask.float().mean().item()
+        # sb_mean = score_batch.mean().item(); sb_min = score_batch.min().item(); sb_max = score_batch.max().item()
+        # ts_array = np.array(traj_scores)
+        # ts_mean, ts_min, ts_max = ts_array.mean(), ts_array.min(), ts_array.max()
+        # li_tensor = torch.tensor(last_indices)
+        # li_mean, li_min, li_max = li_tensor.float().mean().item(), int(li_tensor.min()), int(li_tensor.max())
+        # print(f"📊 [MULTI {agent_id}] attn_mean={attn_mean:.3f} | score_batch[min={sb_min:.1f}, max={sb_max:.1f}, mean={sb_mean:.3f}] | traj_scores[min={ts_min:.1f}, max={ts_max:.1f}, mean={ts_mean:.3f}] | last_idx[min={li_min}, max={li_max}, mean={li_mean:.1f}]")
         
         tensor_batch = {
             "input_ids": trajectory_batch,
@@ -380,6 +371,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             "traj_mask": traj_mask,
         }
         
+        # self.visualize_trajectory(DataProto.from_dict(tensors=tensor_batch))
         return DataProto.from_dict(tensors=tensor_batch)
     
     def fit_multi_agent(self):
@@ -397,7 +389,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         )
         
         self.global_steps = 0
-        self._load_checkpoint()
+        # self._load_checkpoint()
         
         start_time = time.time()
         if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
@@ -446,6 +438,9 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         meta_info=batch_global.meta_info
                     )
                     print("CHAIN OF EXPERTS COMPLETE FOR THE CURRENT STEP")
+                    processed_any = False  # Track if any agent completes successfully
+                    last_valid_batch = None  # Track last batch with all required keys
+                    
 
                     for agent_id, agent_batch in final_gen_batch_output.items():
                         if agent_id not in metrics_global:
@@ -499,6 +494,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                                                 
                             uids = batch.non_tensor_batch["uid"]
                             unique_uids = np.unique(uids)
+                            print(f"🔍 REJECTION_SAMPLING: total_samples={len(uids)}, unique_uids={len(unique_uids)}, n_per_uid={len(uids)//len(unique_uids) if len(unique_uids) else 0}")
                             valid_mask = torch.ones(len(uids), dtype=torch.bool)
                             solve_none = 0
                             solve_all = 0
@@ -530,6 +526,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                                 num_rejected = original_batch_size - num_kept
                                 print(f"🎲 [{agent_id}] Rejection sampling: UIDs={len(unique_uids)} (none={solve_none}, all={solve_all}, partial={solve_partial}) | Samples: original={original_batch_size}, kept={num_kept}, rejected={num_rejected} ({100*num_rejected/original_batch_size:.1f}%)")
 
+                                # raise Exception("Stopping here")
                                 # Skip batch if no valid samples remain
                                 if not valid_mask.any():
                                     print(f"⚠️ Skipping batch for {agent_id}: no valid samples after rejection sampling")
@@ -583,8 +580,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         if self.config.trainer.critic_warmup <= self.global_steps:
                             # import json; json.dump({"input_ids": [x.tolist() for x in batch.batch['input_ids']]}, open(f"{self.config.trainer.default_local_dir}/ppo_tokens_{agent_id}_{self.global_steps}.json", 'w'))
                             # DIAGNOSTIC: Check mask before update_actor
-                            mask = batch.batch["response_mask"]
-                            print(f"🔍 MULTI[{agent_id}] update_actor: mask_mean={mask.float().mean().item():.6f} ones={mask.sum().item()}/{mask.numel()}")
                             # update actor
                             with _timer("update_actor", timing_raw):
                                 agent_worker_group = self.agent_rollout_engines[agent_id].worker_group
@@ -593,13 +588,17 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                             actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                             metrics_global[agent_id].update(actor_output_metrics)
                                                         # Sync updated weights to rollout workers (same as RayPPOAsyncTrainer lines 262-266)
-                            updated_actor_state_dict_ref = agent_worker_group.get_state_dict()
-                            if isinstance(updated_actor_state_dict_ref, list):
-                                updated_actor_state_dict_ref = updated_actor_state_dict_ref[0]
-                            agent_worker_group.update_rollout_actor_module(updated_actor_state_dict_ref)
+                            # updated_actor_state_dict_ref = agent_worker_group.get_state_dict()
+                            # if isinstance(updated_actor_state_dict_ref, list):
+                            #     updated_actor_state_dict_ref = updated_actor_state_dict_ref[0]
+                            #     print("Updating rollout engeine with the new weights")
+                            #     self.agent_rollout_engines[agent_id].update_rollout_actor_module(updated_actor_state_dict_ref)
 
                         print("actor update complete")
-                
+                        # Mark successful processing (batch now has all required keys)
+                        processed_any = True
+                        last_valid_batch = batch
+
                     if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
                         with _timer("testing", timing_raw):
                             print("validation started")
@@ -608,18 +607,20 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         metrics_global["validation"] = {}
                         metrics_global["validation"].update(val_metrics)
 
-                    if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
-                        with _timer("save_checkpoint", timing_raw):
-                            self._save_checkpoint()
-                    print("Checkpoint saved")
+                    # if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
+                    #     with _timer("save_checkpoint", timing_raw):
+                    #         self._save_checkpoint()
+                    # print("Checkpoint saved")
                 # If every agent was skipped by rejection sampling pull a new env batch
                 if self.config.trainer.rejection_sample and not processed_any:
                     print("⚠️ All agents skipped – pulling a new env batch")
                     continue
 
                 # Collect and log metrics
-                metrics_global.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
-                metrics_global.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
+                # Collect and log metrics (use last valid batch with all required keys)
+                if last_valid_batch is not None:
+                    metrics_global.update(compute_data_metrics(batch=last_valid_batch, use_critic=self.use_critic))
+                    metrics_global.update(compute_timing_metrics(batch=last_valid_batch, timing_raw=timing_raw))
                 
                 logger.log(data=metrics_global, step=self.global_steps)
                 self.global_steps += 1

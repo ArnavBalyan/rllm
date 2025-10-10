@@ -411,7 +411,7 @@ class MultiAgentExecutionEngine:
                 agent_response_tokens[agent_id].extend(env_tokens)
                 agent_response_masks[agent_id].extend(env_masks)
             completed_turns = completed_turns + 1
-        
+        env.close()
         if mode == "Token":
             
             # Extract data_source from env if available

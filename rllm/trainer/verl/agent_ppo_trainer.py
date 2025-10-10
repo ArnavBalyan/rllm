@@ -227,6 +227,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                         # Group rewards by uid
                         uids = batch.non_tensor_batch["uid"]
                         unique_uids = np.unique(uids)
+                        print(f"🔍 REJECTION_SAMPLING: total_samples={len(uids)}, unique_uids={len(unique_uids)}, n_per_uid={len(uids)//len(unique_uids) if len(unique_uids) else 0}")
                         valid_mask = torch.ones(len(uids), dtype=torch.bool)
                         solve_none = 0
                         solve_all = 0
@@ -272,7 +273,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                             num_rejected = original_batch_size - num_kept
                             print(f"🎲 Rejection sampling: UIDs={len(unique_uids)} (none={solve_none}, all={solve_all}, partial={solve_partial}) | Samples: original={original_batch_size}, kept={num_kept}, rejected={num_rejected} ({100*num_rejected/original_batch_size:.1f}%)")
 
-
+                            # raise Exception("Stopping here")
                             # If no valid samples remain, skip this batch and get a new one
                             if not valid_mask.any():
                                 continue
@@ -415,10 +416,8 @@ class AgentPPOTrainer(RayPPOTrainer):
 
                     # implement critic warmup
                     if self.config.trainer.critic_warmup <= self.global_steps:
-                        # import json; json.dump({"input_ids": [x.tolist() for x in batch.batch['input_ids']]}, open(f"{self.config.trainer.default_local_dir}/ppo_tokens_{self.global_steps}.json", 'w'))
+                        import json; json.dump({"input_ids": [x.tolist() for x in batch.batch['input_ids']]}, open(f"{self.config.trainer.default_local_dir}/ppo_tokens_{self.global_steps}.json", 'w'))
                         # DIAGNOSTIC: Check mask before update_actor
-                        mask = batch.batch["response_mask"]
-                        print(f"🔍 SINGLE update_actor: mask_mean={mask.float().mean().item():.6f} ones={mask.sum().item()}/{mask.numel()}")
                         # update actor
                         with _timer("update_actor", timing_raw):
                             actor_output = self.actor_rollout_wg.update_actor(batch)
@@ -713,20 +712,37 @@ class AgentPPOTrainer(RayPPOTrainer):
             if last_valid_idx >= 0 and last_valid_idx < score_batch.shape[1]:
                 score_batch[i, last_valid_idx] = traj_score
                 scores_placed += 1
-            last_indices.append(last_valid_idx)
+        #         last_indices.append(last_valid_idx)
+        #         # 🔍 DEBUG: Show decoded text for first 3 samples
+        #         if i < 3:
+        #             score_val = traj_score.item() if hasattr(traj_score, 'item') else float(traj_score)
+        #             prompt_text = self.tokenizer.decode(prompts_batch[i], skip_special_tokens=False)
+        #             response_text = self.tokenizer.decode(response_batch[i][:last_valid_idx+1], skip_special_tokens=False)
+        #             print(f"\n{'='*80}")
+        #             print(f"🔍 [SINGLE] Sample {i} - Score Placement Debug")
+        #             print(f"{'='*80}")
+        #             print(f"📝 PROMPT ({prompt_length} tokens):")
+        #             print(f"   {prompt_text}")
+        #             print(f"\n💬 RESPONSE ({last_valid_idx+1} tokens):")
+        #             print(f"   {response_text}")
+        #             print(f"\n📊 SCORE INFO:")
+        #             print(f"   • Score value: {score_val:.4f}")
+        #             print(f"   • Placed at index: {last_valid_idx}")
+        #             print(f"   • Valid response length: {valid_response_length_sequences[i].item()}")
+        #             print(f"{'='*80}\n")
         
         # Log score_batch creation characteristics
         print(f"📊 [SINGLE] score_batch created: shape={score_batch.shape}, prompt_len={prompt_length}, "
               f"valid_resp_lens=[min={valid_response_length_sequences.min().item()}, max={valid_response_length_sequences.max().item()}, mean={valid_response_length_sequences.float().mean().item():.1f}], "
               f"scores_placed={scores_placed}/{len(traj_scores)}")
         # NEW concise stats log
-        attn_mean = attention_mask.float().mean().item()
-        sb_mean = score_batch.mean().item(); sb_min = score_batch.min().item(); sb_max = score_batch.max().item()
-        ts_array = np.array(traj_scores)
-        ts_mean, ts_min, ts_max = ts_array.mean(), ts_array.min(), ts_array.max()
-        li_tensor = torch.tensor(last_indices)
-        li_mean, li_min, li_max = li_tensor.float().mean().item(), int(li_tensor.min()), int(li_tensor.max())
-        print(f"📊 [SINGLE] attn_mean={attn_mean:.3f} | score_batch[min={sb_min:.1f}, max={sb_max:.1f}, mean={sb_mean:.3f}] | traj_scores[min={ts_min:.1f}, max={ts_max:.1f}, mean={ts_mean:.3f}] | last_idx[min={li_min}, max={li_max}, mean={li_mean:.1f}]")
+        # attn_mean = attention_mask.float().mean().item()
+        # sb_mean = score_batch.mean().item(); sb_min = score_batch.min().item(); sb_max = score_batch.max().item()
+        # ts_array = np.array(traj_scores)
+        # ts_mean, ts_min, ts_max = ts_array.mean(), ts_array.min(), ts_array.max()
+        # li_tensor = torch.tensor(last_indices)
+        # li_mean, li_min, li_max = li_tensor.float().mean().item(), int(li_tensor.min()), int(li_tensor.max())
+        # print(f"📊 [SINGLE] attn_mean={attn_mean:.3f} | score_batch[min={sb_min:.1f}, max={sb_max:.1f}, mean={sb_mean:.3f}] | traj_scores[min={ts_min:.1f}, max={ts_max:.1f}, mean={ts_mean:.3f}] | last_idx[min={li_min}, max={li_max}, mean={li_mean:.1f}]")
 
         tensor_batch = {
             "input_ids": trajectory_batch,
@@ -742,7 +758,7 @@ class AgentPPOTrainer(RayPPOTrainer):
 
         return DataProto.from_dict(tensors=tensor_batch), metrics
 
-    def visualize_trajectory(self, tensor_batch, sample_idx=0, max_samples=1, mask_key="traj_mask"):
+    def visualize_trajectory(self, tensor_batch, sample_idx=0, max_samples=1024, mask_key="traj_mask"):
         """
         Visualize the trajectory from tensor_batch by detokenizing prompts and responses,
         and highlighting the masked parts with color.
