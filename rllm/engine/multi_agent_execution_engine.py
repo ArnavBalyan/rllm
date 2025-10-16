@@ -213,7 +213,7 @@ class MultiAgentExecutionEngine:
                 per_env_agents[cfg.agent_id] = role_engine.agent_class(agent_id=cfg.agent_id, **init_args)
             self.env_agents.append(per_env_agents)
     
-    async def run_workflow_trajectory_async(self, env_idx: int, application_id: str, seed: int = 0, mode: str = "Token", **kwargs) -> Dict[str, Any]:
+    async def run_workflow_trajectory_async(self, env_idx: int, application_id: str, seed: int = 0, mode: str = "Token", meta_info: Dict[str, Any] = None, **kwargs) -> Dict[str, Any]:
         env = self.envs[env_idx]
         
         loop = asyncio.get_event_loop()
@@ -276,12 +276,12 @@ class MultiAgentExecutionEngine:
         response_token_len = 0
 
         for step_idx in range(self.max_steps):
-            
+            print(f"🔍 [ENV {env_idx}] === Starting step {step_idx} ===")
             phase_responses = {}
             phase_actions = {} 
             phase_upstream_contexts = {}
             final_action = None
-            
+            print("Printing self.phases, " + str(self.phases))
             for phase_idx, phase in enumerate(self.phases):
                 agent_id = phase.agent_id
                 agent = agents[agent_id]
@@ -310,6 +310,34 @@ class MultiAgentExecutionEngine:
                     max_tokens=max_tokens,
                     **engine.sampling_params
                 )
+                # import os
+                # import json
+                # # meta = kwargs['meta_info']
+                # log_dir = '/home/arnav/workspace/rllm/checkpoints/rllm-agent/4b-frozenlake_agent/completions_log/'
+                # log_file = os.path.join(log_dir, f"step_{meta_info['global_step']}.jsonl")
+                    
+                # # Load all responses for this step
+                # responses_by_uid_step = {}
+                # with open(log_file, 'r') as f:
+                #     for line in f:
+                #         entry = json.loads(line)
+                #         key = (entry['env_idx'], entry['board_desc'], entry['step_idx'])
+                #         responses_by_uid_step[key] = entry['response']
+
+                # current_board = '\n'.join(env.preserved_desc)
+                # lookup_key = (env_idx, current_board, step_idx)
+                # if lookup_key not in responses_by_uid_step:
+                #         raise KeyError(
+                #             f"🔴 [REPLAY ERROR] No saved response found for:\n"
+                #             f"  uid={env_idx}\n"
+                #             f"  step_idx={meta_info['global_step']}\n"
+                #             f"  board_desc={repr(current_board)}\n"
+                #             f"  Available keys: {list(responses_by_uid_step.keys())[:10]}"
+                #         )                    
+                # # Get response for current uid and step_idx
+                # response = responses_by_uid_step[lookup_key]
+                # print(f"🎯 [REPLAY] Loaded response for uid={env_idx} step={step_idx}")
+                # print(f"🎯 [REPLAY] global_step={meta_info['global_step']} env_idx={env_idx} step_idx={step_idx} board='{repr(current_board)}' response_len={len(response)} agent_id={agent_id}")
                 
                 action = agent.complete_step_with_model_response(response)
                 action_str = action.action 
@@ -372,6 +400,7 @@ class MultiAgentExecutionEngine:
                 total_step_tokens = len(asst_tokens) + len(env_tokens_for_budget)
                 agent_response_token_len[agent_id] += total_step_tokens
                 response_token_len += total_step_tokens
+                print(f"🔍 [ENV {env_idx}] step={step_idx} agent={agent_id}: asst_tokens={len(asst_tokens)} env_tokens={len(env_tokens_for_budget)} total_step={total_step_tokens} cumulative={response_token_len} max={engine.max_response_length}")
 
                 if response_token_len >= engine.max_response_length:
                     # Need to truncate combined sequence exactly once (no later env append)
@@ -380,12 +409,13 @@ class MultiAgentExecutionEngine:
 
                     overflow = response_token_len - engine.max_response_length
                     keep_len = max(0, len(combined_tokens) - overflow)
-
+                    print(f"🔍 [ENV {env_idx}] TRUNCATION TRIGGERED: overflow={overflow} keep_len={keep_len}/{len(combined_tokens)}")
                     agent_response_tokens[agent_id].extend(combined_tokens[:keep_len])
                     agent_response_masks[agent_id].extend(combined_masks[:keep_len])
 
                     if response_token_len - len(env_tokens_for_budget) > engine.max_response_length:
                         total_reward = 0.0
+                        print(f"🔍 [ENV {env_idx}] Reward set to 0.0 due to truncation before env message")
 
                     any_agent_truncated = True
                     termination_reason = "TRUNCATION"
@@ -394,13 +424,17 @@ class MultiAgentExecutionEngine:
                     agent_response_tokens[agent_id].extend(asst_tokens)
                     agent_response_masks[agent_id].extend(asst_masks)
             
+            print(f"🔍 [ENV {env_idx}] Termination check: any_agent_truncated={any_agent_truncated}, done={done}")
+
             if any_agent_truncated:
+                print(f"🔍 [ENV {env_idx}] TERMINATING: truncation at step {step_idx}")
                 break
             
             if done:
+                print(f"🔍 [ENV {env_idx}] TERMINATING: done=True at step {step_idx}")
                 termination_reason = "ENV_DONE"
                 break
-            
+            print(f"🔍 [ENV {env_idx}] Continuing to next step (not done, not truncated)")
             # Step 3: Not done - add env tokens to all agents
             for phase_idx, phase in enumerate(self.phases):
                 agent_id = phase.agent_id
@@ -411,6 +445,7 @@ class MultiAgentExecutionEngine:
                 agent_response_tokens[agent_id].extend(env_tokens)
                 agent_response_masks[agent_id].extend(env_masks)
             completed_turns = completed_turns + 1
+        print(f"🔍 [ENV {env_idx}] TRAJECTORY COMPLETE: completed_turns={completed_turns} termination={termination_reason} total_reward={total_reward} final_token_len={response_token_len}")
         env.close()
         if mode == "Token":
             
@@ -603,7 +638,7 @@ class MultiAgentExecutionEngine:
         
         return env_msg_tokens, env_msg_masks
                 
-    async def trajectory_generator(self, reset_seed=0, timing_raw=None, mode="Token", **kwargs):
+    async def trajectory_generator(self, reset_seed=0, timing_raw=None, mode="Token", meta_info: Dict[str, Any] = None, **kwargs):
         """Generate trajectories for all environments using workflow execution"""
         if timing_raw is None:
             timing_raw = {}
@@ -632,6 +667,7 @@ class MultiAgentExecutionEngine:
                     application_id=application_id,
                     seed=reset_seed,
                     mode=mode,
+                    meta_info=meta_info,
                     **kwargs
                 )
                 
@@ -681,7 +717,7 @@ class MultiAgentExecutionEngine:
         
         async def _collect_batch():
             batch = []
-            async for traj in self.trajectory_generator(timing_raw=timing_raw, mode="Token", **meta_info or {}):
+            async for traj in self.trajectory_generator(timing_raw=timing_raw, meta_info=meta_info, mode="Token"):
                 batch.append(traj)
             return batch
         

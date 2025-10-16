@@ -101,7 +101,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             agent_id = agent_config.agent_id
             
             # Create separate resource pool for this agent
-            agent_resource_pool_spec = {f"{agent_id}_pool": [8]}  # 2 GPUs per agent
+            agent_resource_pool_spec = {f"{agent_id}_pool": [2]}  # 2 GPUs per agent
             agent_mapping = {Role.ActorRollout: f"{agent_id}_pool"}
             agent_rpm = ResourcePoolManager(agent_resource_pool_spec, agent_mapping)
             agent_rpm.create_resource_pool()
@@ -151,7 +151,14 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 self.agent_rollout_engines[agent_id] = agent_async_manager
                 self.agent_worker_groups_array.append(agent_wg)  # Store in array
                 print(f"Created AsyncLLMServerManager for agent '{agent_id}' with model: {agent_config.model_path or 'default'}")
-        
+                print(f"✅ [INIT {agent_id}] AsyncLLMServerManager created")
+                print(f"  server_addresses: {agent_async_manager.server_addresses}")
+                
+                # DEBUG: Log values AFTER worker creation to check for corruption
+                print(f"[MULTI-AGENT DEBUG {agent_id}] AFTER worker init:")
+                print(f"  ppo_micro_batch_size = {agent_config_dict.actor_rollout_ref.actor.ppo_micro_batch_size}")
+                print(f"  Original config ppo_micro_batch_size = {self.config.actor_rollout_ref.actor.ppo_micro_batch_size}")
+
         if self.use_critic and self.agent_resource_pools:
             first_agent_pool = self.agent_resource_pools[0]
             
@@ -201,16 +208,20 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 self.rollout_wg = final_agent_engine.rollout_engine
     
     def init_envs_and_agents(self, batch):
-        
+
         env_args = batch.non_tensor_batch["extra_info"].tolist()
-        
+        uids = batch.non_tensor_batch["uid"].tolist()
+
         envs = []
         for i, env_arg in enumerate(env_args):
             if isinstance(env_arg, str):
                 env_config = json.loads(env_arg)
             else:
                 env_config = env_arg
-            env = self.env_class.from_dict({**env_config, **self.env_args})
+            # Pass UID to environment config
+            env_config["uid"] = uids[i]
+            print("Printing uid form the env config: ", uids[i], env_config["uid"])
+            env = self.env_class.from_dict({**self.env_args, **env_config})
             envs.append(env)
 
         self.multi_agent_engine.update_envs_and_agents(envs)
@@ -225,6 +236,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 timing_raw=timing_raw,
                 meta_info=meta_info
             )
+        workflow_results.sort(key=lambda x: x["idx"])
         agent_batches = {}
         metrics = {}
 
@@ -255,7 +267,6 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                     f"traj/{k}_max": v_list.max(),
                 }
             )
-
         return agent_batches, metrics
     
     def _transform_agent_trajectories_for_agent(self, agent_id: str, workflow_results: List[Dict[str, Any]]):
@@ -279,7 +290,12 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             all_response_tokens_list.append(response_tokens)
             all_masks_list.append(traj["response_masks"])
             traj_scores.append(traj["trajectory_reward"])
-            chat_completions.append({"chat_completions": traj["chat_completions"], "board_desc": workflow_result["board_desc"]})
+            chat_completions.append({
+                "chat_completions": traj["chat_completions"],
+                "board_desc": workflow_result["board_desc"],
+                "uid": workflow_result["uid"],
+                "trajectory_reward": traj["trajectory_reward"]
+            })
         
         if len(traj_scores) > 0:
             traj_scores_array = np.array(traj_scores)
@@ -287,7 +303,13 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         
         save_dir = os.path.join(self.config.trainer.default_local_dir, f"chat_completions/{agent_id}")
         os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
+
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"step_{self.global_steps}_{timestamp}.jsonl"
+        filepath = os.path.join(save_dir, filename)
+        print(f"💾 [MULTI {agent_id}] Saving {len(chat_completions)} chat completions to: {filepath}")
+
+        with open(filepath, "w") as f:
             for chat_completion in chat_completions:
                 f.write(json.dumps(chat_completion) + "\n")
 
@@ -404,7 +426,21 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         for epoch in range(self.config.trainer.total_epochs):
             for batch_dict in self.train_dataloader:
                 batch_global: DataProto = DataProto.from_single_dict(batch_dict)
-                batch_global.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch_global.batch))], dtype=object)
+                batch_global.non_tensor_batch["uid"] = np.array([
+                    item.get("uid", f"{item['seed']}_{item['size']}_{item['p']}")
+                    for item in batch_dict["extra_info"]
+                ], dtype=object)
+                
+                # DEBUG_ALLOWLIST_UIDS = [
+                #     "7805_9_0.7184458405769556",
+                # ]
+                # batch_uids = batch_global.non_tensor_batch["uid"]
+                # has_allowlisted_uid = any(uid in DEBUG_ALLOWLIST_UIDS for uid in batch_uids)
+                # if not has_allowlisted_uid:
+                #     print(f"⏭️  [MULTI] Skipping batch - no allowlisted UIDs found (batch UIDs: {batch_uids.tolist()})")
+                #     continue
+                # print(f"🎯 [MULTI] Processing batch with allowlisted UID(s): {[uid for uid in batch_uids if uid in DEBUG_ALLOWLIST_UIDS]}")
+
                 batch_global = batch_global.repeat(
                     repeat_times=self.config.actor_rollout_ref.rollout.n,
                     interleave=True,
@@ -427,6 +463,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                         "workflow_type": self.workflow.workflow_id,
                         "temperature": self.config.actor_rollout_ref.rollout.temperature,
                         "uids": batch_global.non_tensor_batch["uid"].tolist(),
+                        "global_step": self.global_steps,
                     }
                     print("Batch dict 370")
 
@@ -491,7 +528,19 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                             seq_rewards = reward_tensor.sum(-1)  # Sum per sequence
                             unique_rewards = torch.unique(seq_rewards)
                             print(f"💰 [MULTI {agent_id}] Rewards ({reward_source}): shape={reward_tensor.shape}, seq_sum range=[{seq_rewards.min():.2f}, {seq_rewards.max():.2f}], unique={unique_rewards.tolist()}")
-                                                
+                            
+                            # 🔍 VISUAL: Show raw engine scores by sample (binary 0/1)
+                            uids = batch.non_tensor_batch["uid"]
+                            print(f"\n{'='*100}")
+                            print(f"📊 [MULTI {agent_id}] RAW ENGINE SCORES (first 40 samples, █=1 ·=0)")
+                            print(f"{'='*100}")
+                            for i in range(min(100000, len(seq_rewards))):
+                                score = seq_rewards[i].item()
+                                symbol = "█" if score >= 1.0 else "·"
+                                print(f"{i} UID{uids[i]} {symbol} score={score:.4f}")
+                            print(f"{'='*100}\n")
+
+
                             uids = batch.non_tensor_batch["uid"]
                             unique_uids = np.unique(uids)
                             print(f"🔍 REJECTION_SAMPLING: total_samples={len(uids)}, unique_uids={len(unique_uids)}, n_per_uid={len(uids)//len(unique_uids) if len(unique_uids) else 0}")
@@ -516,7 +565,9 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                             # Apply rejection sampling filter (keep only partial samples)
                             if self.config.trainer.rejection_sample:
                                 # Log full-score BEFORE filtering (to track actual model performance)
-                                full_sequence_score = reward_tensor.sum(-1)
+                                
+                                token_level_rewards = batch.batch["token_level_scores"]
+                                full_sequence_score = token_level_rewards.sum(-1)
                                 metrics_global[agent_id]["critic/full-score/mean"] = torch.mean(full_sequence_score).detach().item()
                                 metrics_global[agent_id]["critic/full-score/max"] = torch.max(full_sequence_score).detach().item()
                                 metrics_global[agent_id]["critic/full-score/min"] = torch.min(full_sequence_score).detach().item()
@@ -538,6 +589,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                                 # Round down to nearest multiple of world size (matching single-agent)
                                 num_trainer_replicas = self.actor_rollout_wg.world_size
                                 max_batch_size = (batch.batch["input_ids"].shape[0] // num_trainer_replicas) * num_trainer_replicas
+                                print("Max batch size was: ", max_batch_size)
                                 if not max_batch_size:
                                     # All samples filtered out
                                     print(f"⚠️ Skipping {agent_id}: batch too small after rejection sampling")
@@ -581,24 +633,70 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                             # import json; json.dump({"input_ids": [x.tolist() for x in batch.batch['input_ids']]}, open(f"{self.config.trainer.default_local_dir}/ppo_tokens_{agent_id}_{self.global_steps}.json", 'w'))
                             # DIAGNOSTIC: Check mask before update_actor
                             # update actor
+
+                            save_dir = 'checkpoints/rllm-agent/4b-frozenlake_agent/batch_snapshots'
+                            # load_snapshot_path = os.path.join(save_dir, f"batch_single_agent_step_{self.global_steps}.pt")
+                            
+                            # snapshot = torch.load(load_snapshot_path, weights_only=False)
+                            # batch = DataProto.from_dict(
+                            #     tensors=snapshot['batch_tensors'],
+                            #     non_tensors=snapshot['non_tensor_batch'],
+                            #     meta_info=snapshot['meta_info']
+                            # )
+                            # print(f"📖 [MULTI AGENT] Loaded batch from: {load_snapshot_path}")
+                            # print(f"   Batch size: {len(batch)}, UIDs: {batch.non_tensor_batch.get('uid', ['N/A'])[:3]}...")
+
+                            # if 'uid' in batch.non_tensor_batch:
+                            #     print(f"   UIDs: {batch.non_tensor_batch['uid'][:3]}...")
+                            # print(f"{'='*80}\n")
+                            # save_dir = os.path.join(self.config.trainer.default_local_dir, "batch_snapshots")
+                            # os.makedirs(save_dir, exist_ok=True)
+                            # snapshot_path = os.path.join(save_dir, f"batch_multi_agent_{agent_id}_step_{self.global_steps}.pt")
+                            # torch.save({
+                            #     'agent_id': agent_id,
+                            #     'batch_tensors': batch.batch.to_dict() if batch.batch is not None else {},
+                            #     'non_tensor_batch': batch.non_tensor_batch,
+                            #     'meta_info': batch.meta_info,
+                            # }, snapshot_path)
+                            # print(f"💾 [MULTI AGENT {agent_id}] Saved batch snapshot to: {snapshot_path}")
+                            
+                            # Save JSON with full raw values (for human inspection)
+                            import json
+                            json_path = os.path.join(save_dir, f"batch_multi_agent_{agent_id}_step_{self.global_steps}_2ndrun_nonreplay.json")
+                            def to_json_safe(obj):
+                                if isinstance(obj, torch.Tensor):
+                                    return obj.detach().cpu().numpy().tolist()
+                                elif isinstance(obj, np.ndarray):
+                                    return obj.tolist()
+                                elif isinstance(obj, dict):
+                                    return {k: to_json_safe(v) for k, v in obj.items()}
+                                elif isinstance(obj, (list, tuple)):
+                                    return [to_json_safe(item) for item in obj]
+                                else:
+                                    return obj
+                            
+                            json_data = {
+                                'step': self.global_steps,
+                                'batch_tensors': to_json_safe(batch.batch.to_dict() if batch.batch is not None else {}),
+                                'non_tensor_batch': to_json_safe(batch.non_tensor_batch),
+                                'meta_info': to_json_safe(batch.meta_info),
+                            }
+                            with open(json_path, 'w') as f:
+                                json.dump(json_data, f, indent=None)
+                            print(f"📄 [MULTI AGENT {agent_id}] Saved JSON snapshot to: {json_path}")
+
                             with _timer("update_actor", timing_raw):
                                 agent_worker_group = self.agent_rollout_engines[agent_id].worker_group
                                 actor_output = agent_worker_group.update_actor(batch)
                                 
                             actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                             metrics_global[agent_id].update(actor_output_metrics)
-                                                        # Sync updated weights to rollout workers (same as RayPPOAsyncTrainer lines 262-266)
-                            # updated_actor_state_dict_ref = agent_worker_group.get_state_dict()
-                            # if isinstance(updated_actor_state_dict_ref, list):
-                            #     updated_actor_state_dict_ref = updated_actor_state_dict_ref[0]
-                            #     print("Updating rollout engeine with the new weights")
-                            #     self.agent_rollout_engines[agent_id].update_rollout_actor_module(updated_actor_state_dict_ref)
+                            # Sync updated weights to rollout workers (same as RayPPOAsyncTrainer lines 262-266)
 
                         print("actor update complete")
                         # Mark successful processing (batch now has all required keys)
                         processed_any = True
                         last_valid_batch = batch
-
                     if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
                         with _timer("testing", timing_raw):
                             print("validation started")
@@ -624,7 +722,8 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 
                 logger.log(data=metrics_global, step=self.global_steps)
                 self.global_steps += 1
-                
+                # if self.global_steps == 35:
+                #     raise Exception("Stopping here")
                 if self.global_steps >= self.total_training_steps:
                     if self.val_reward_fn is not None:
                         print("Validating the Mutli agent loop")

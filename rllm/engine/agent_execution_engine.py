@@ -310,6 +310,7 @@ class AgentExecutionEngine:
                     break
 
             kwargs["max_tokens"] = max_tokens
+            print(f"🔍 [SINGLE-AGENT ENV {idx}] step={step_idx}: max_tokens={max_tokens} response_token_len={response_token_len} max_response_length={self.max_response_length}")
 
             start_time = time.time()
             response = await self.get_model_response(
@@ -319,6 +320,25 @@ class AgentExecutionEngine:
                 step_id=step_idx,
                 **kwargs
             )
+     
+            # 🎯 LOG RAW MODEL RESPONSE for replay (save immediately after generation)
+            if 'meta_info' in kwargs and kwargs['meta_info']:
+                print("Saving the output to log" + str(env.idx) + str(env.preserved_desc))
+                import os
+                import json
+                meta = kwargs['meta_info']
+                log_dir = meta['log_dir']
+                os.makedirs(log_dir, exist_ok=True)
+                log_file = os.path.join(log_dir, f"step_{meta['global_step']}.jsonl")
+                with open(log_file, 'a') as f:
+                    f.write(json.dumps({
+                        'env_idx': env.idx,
+                        'board_desc': '\n'.join(env.preserved_desc),
+                        'step_idx': step_idx,
+                        'response': response
+                    }) + '\n')
+            print(f"🔍 [SINGLE-AGENT ENV {idx}] step={step_idx}: Generated response_len={len(response)} chars")
+
             delta_time = time.time() - start_time
             llm_time += delta_time
             total_time += delta_time
@@ -388,7 +408,9 @@ class AgentExecutionEngine:
             # Update repsonse token length
             response_token_len += len(assistant_msg_tokens) + len(env_msg_tokens)
             # Reached maximum number of tokens for the trajectory
+            print(f"🔍 [SINGLE-AGENT ENV {idx}] step={step_idx}: After tokenization: asst_tokens={len(assistant_msg_tokens)} env_tokens={len(env_msg_tokens)} cumulative={response_token_len} max={self.max_response_length}")
             if not self.enforce_max_prompt_length and response_token_len >= self.max_response_length:
+                print(f"🔍 [SINGLE-AGENT ENV {idx}] TRUNCATION TRIGGERED at step {step_idx}: cumulative={response_token_len} >= max={self.max_response_length}")
                 # Truncation length
                 truncation_length = self.max_response_length - response_token_len
                 # Truncate the response and masks

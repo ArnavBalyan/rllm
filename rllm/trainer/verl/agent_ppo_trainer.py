@@ -96,23 +96,38 @@ class AgentPPOTrainer(RayPPOTrainer):
         Initialize environment depending on env_class with the necessary extra_info, also set uid of the batch.
         """
         env_args = batch.non_tensor_batch["extra_info"].tolist()
+        uids = batch.non_tensor_batch["uid"].tolist()
+        
+        data_source = "unknown"
+        try:
+                if hasattr(env, 'task_data') and env.task_data:
+                    data_source = env.task_data["data_source"]
+                elif hasattr(env, 'entry') and env.entry:
+                    data_source = env.entry["data_source"]
+        except Exception:
+                pass
 
 
         full_agent_args = dict(self.config.agent.get("agent_args", {})) | self.agent_args
         base_env_args = dict(self.config.env.get("env_args", {})) | self.env_args
 
-        def _create_env(i):
-            if isinstance(env_args[i], str):
-                env_args[i] = json.loads(env_args[i])
-            return i, self.env_class.from_dict({**env_args[i], **base_env_args})
+        def _create_env(i, env_args_list, uids_list, base_env_args_dict):
+            env_arg = env_args_list[i]
+            if isinstance(env_arg, str):
+                env_config = json.loads(env_arg)
+            else:
+                env_config = env_arg
+            # Pass UID to environment config (matching multi-agent implementation)
+            env_config["uid"] = uids_list[i]
+            return i, self.env_class.from_dict({**base_env_args_dict, **env_config})
 
-        def _create_agent(i):
-            return i, self.agent_class(**full_agent_args)
+        def _create_agent(i, agent_args_dict):
+            return i, self.agent_class(**agent_args_dict)
 
         # Create environments in parallel while preserving order
         envs = [None] * len(env_args)
         with ThreadPoolExecutor(max_workers=64) as executor:
-            env_futures = [executor.submit(_create_env, i) for i in range(len(env_args))]
+            env_futures = [executor.submit(_create_env, i, env_args, uids, base_env_args) for i in range(len(env_args))]
             for future in as_completed(env_futures):
                 idx, env = future.result()
                 envs[idx] = env
@@ -120,7 +135,7 @@ class AgentPPOTrainer(RayPPOTrainer):
         # Create agents in parallel while preserving order
         agents = [None] * len(envs)
         with ThreadPoolExecutor(max_workers=64) as executor:
-            agent_futures = [executor.submit(_create_agent, i) for i in range(len(envs))]
+            agent_futures = [executor.submit(_create_agent, i, full_agent_args) for i in range(len(envs))]
             for future in as_completed(agent_futures):
                 idx, agent = future.result()
                 agents[idx] = agent
@@ -163,12 +178,14 @@ class AgentPPOTrainer(RayPPOTrainer):
             pprint(f"epoch {epoch}, step {self.global_steps} started")
             for batch_dict in self.train_dataloader:
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
-                batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))], dtype=object)
+                batch.non_tensor_batch["uid"] = np.array([
+                    item.get("uid", f"{item['seed']}_{item['size']}_{item['p']}")
+                    for item in batch_dict["extra_info"]
+                ], dtype=object)
                 batch = batch.repeat(
                     repeat_times=self.config.actor_rollout_ref.rollout.n,
                     interleave=True,
                 )
-
                 metrics = {}
                 timing_raw = {}
 
@@ -180,6 +197,8 @@ class AgentPPOTrainer(RayPPOTrainer):
                     batch.meta_info = {
                         "agent_rollout": True,
                         "uids": batch.non_tensor_batch["uid"].tolist(),
+                        "global_step": self.global_steps,
+                        "log_dir": os.path.join(self.config.trainer.default_local_dir, "completions_log"),
                     }
 
                     if self.config.agent.use_stepwise_advantage:
@@ -222,6 +241,17 @@ class AgentPPOTrainer(RayPPOTrainer):
                         seq_rewards = reward_tensor.sum(-1)  # Sum per sequence
                         unique_rewards = torch.unique(seq_rewards)
                         print(f"💰 [SINGLE] Rewards ({reward_source}): shape={reward_tensor.shape}, seq_sum range=[{seq_rewards.min():.2f}, {seq_rewards.max():.2f}], unique={unique_rewards.tolist()}")
+
+                        uids = batch.non_tensor_batch["uid"]
+                        print(f"\n{'='*100}")
+                        print(f"📊 [SINGLE] RAW ENGINE SCORES (first 40 samples, █=1 ·=0)")
+                        print(f"{'='*100}")
+                        for i in range(min(100000,len(seq_rewards))):
+                            score = seq_rewards[i].item()
+                            symbol = "█" if score >= 1.0 else "·"
+                            print(f"{i} UID{uids[i]} {symbol} score={score:.4f}")
+                        print(f"{'='*100}\n")
+
 
                         # Rejection sampling based on rewards
                         # Group rewards by uid
@@ -323,6 +353,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                                 # Round down to the nearest multiple of world size
                                 num_trainer_replicas = self.actor_rollout_wg.world_size
                                 max_batch_size = (batch.batch["input_ids"].shape[0] // num_trainer_replicas) * num_trainer_replicas
+                                print("Max batch size was: ", max_batch_size)
                                 if not max_batch_size:
                                     # give up, you got everything either all wrong or right.
                                     continue
@@ -337,6 +368,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                             batch = batch.union(old_log_prob)
 
                         if self.use_reference_policy:
+                            raise Exception("This should not be called")
                             # compute reference log_prob
                             with _timer("ref", timing_raw):
                                 ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
@@ -419,6 +451,41 @@ class AgentPPOTrainer(RayPPOTrainer):
                         import json; json.dump({"input_ids": [x.tolist() for x in batch.batch['input_ids']]}, open(f"{self.config.trainer.default_local_dir}/ppo_tokens_{self.global_steps}.json", 'w'))
                         # DIAGNOSTIC: Check mask before update_actor
                         # update actor
+                        save_dir = os.path.join(self.config.trainer.default_local_dir, "batch_snapshots")
+                        os.makedirs(save_dir, exist_ok=True)
+                        snapshot_path = os.path.join(save_dir, f"batch_single_agent_step_{self.global_steps}.pt")
+                        torch.save({
+                            'batch_tensors': batch.batch.to_dict() if batch.batch is not None else {},
+                            'non_tensor_batch': batch.non_tensor_batch,
+                            'meta_info': batch.meta_info,
+                        }, snapshot_path)
+                        print(f"💾 [SINGLE AGENT] Saved batch snapshot to: {snapshot_path}")
+
+                        import json
+                        json_path = os.path.join(save_dir, f"batch_single_agent_step_{self.global_steps}.json")
+                        def to_json_safe(obj):
+                            if isinstance(obj, torch.Tensor):
+                                return obj.detach().cpu().numpy().tolist()
+                            elif isinstance(obj, np.ndarray):
+                                return obj.tolist()
+                            elif isinstance(obj, dict):
+                                return {k: to_json_safe(v) for k, v in obj.items()}
+                            elif isinstance(obj, (list, tuple)):
+                                return [to_json_safe(item) for item in obj]
+                            else:
+                                return obj
+                        
+                        json_data = {
+                            'step': self.global_steps,
+                            'batch_tensors': to_json_safe(batch.batch.to_dict() if batch.batch is not None else {}),
+                            'non_tensor_batch': to_json_safe(batch.non_tensor_batch),
+                            'meta_info': to_json_safe(batch.meta_info),
+                        }
+                        with open(json_path, 'w') as f:
+                            json.dump(json_data, f, indent=None)
+                        print(f"📄 [SINGLE AGENT] Saved JSON snapshot to: {json_path}")
+
+
                         with _timer("update_actor", timing_raw):
                             actor_output = self.actor_rollout_wg.update_actor(batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
@@ -442,7 +509,8 @@ class AgentPPOTrainer(RayPPOTrainer):
                 logger.log(data=metrics, step=self.global_steps)
 
                 self.global_steps += 1
-
+                if self.global_steps == 35:
+                    raise Exception("Stopping here")
                 if self.global_steps >= self.total_training_steps:
                     # perform validation after training
                     if self.val_reward_fn is not None:
@@ -636,7 +704,12 @@ class AgentPPOTrainer(RayPPOTrainer):
             all_response_tokens_list.append(response_tokens)
             all_masks_list.append(traj["response_masks"])
             traj_scores.append(traj["trajectory_reward"])
-            chat_completions.append(traj["chat_completions"])
+            
+            chat_completions.append({
+                "chat_completions": traj["chat_completions"],
+                "uid": traj["uid"],
+                "trajectory_reward": traj["trajectory_reward"] 
+            })
             traj_metrics.append(traj["metrics"])
         
         
@@ -663,14 +736,21 @@ class AgentPPOTrainer(RayPPOTrainer):
             )
 
         # Save chat completions to a file
+        import time
         save_dir = os.path.join(self.config.trainer.default_local_dir, "chat_completions")
         os.makedirs(save_dir, exist_ok=True)
-        # Save it into a jsonl files (self.global_steps)
-        with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
+        # Generate unique filename with timestamp to prevent overwriting
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"step_{self.global_steps}_{timestamp}.jsonl"
+        filepath = os.path.join(save_dir, filename)
+
+        print(f"💾 [AGENT] Saving {len(chat_completions)} chat completions to: {filepath}")
+
+        with open(filepath, "w") as f:
             for chat_completion in chat_completions:
+                chat_completion["trajectory_reward"] = float(chat_completion["trajectory_reward"])
                 f.write(json.dumps(chat_completion) + "\n")
-        
-        
+ 
         # reverse the list and create tensors, pad, then flip to achieve left padding
         prompts_batch = torch.nn.utils.rnn.pad_sequence(
             [torch.flip(i, dims=[0]) for i in all_initial_tokens_list],
@@ -754,11 +834,14 @@ class AgentPPOTrainer(RayPPOTrainer):
             "traj_mask": traj_mask,
         }
 
-        self.visualize_trajectory(DataProto.from_dict(tensors=tensor_batch))
+        # self.visualize_trajectory(DataProto.from_dict(tensors=tensor_batch))
 
-        return DataProto.from_dict(tensors=tensor_batch), metrics
+        result_batch = DataProto.from_dict(tensors=tensor_batch)
+        # self.visualize_trajectory(result_batch, sample_idx=0, max_samples=len(tensor_batch["prompts"]))
 
-    def visualize_trajectory(self, tensor_batch, sample_idx=0, max_samples=1024, mask_key="traj_mask"):
+        return result_batch, metrics
+
+    def visualize_trajectory(self, tensor_batch, sample_idx=0, max_samples=2000, mask_key="traj_mask"):
         """
         Visualize the trajectory from tensor_batch by detokenizing prompts and responses,
         and highlighting the masked parts with color.
@@ -770,6 +853,13 @@ class AgentPPOTrainer(RayPPOTrainer):
         """
         from rllm.misc import colorful_print
 
+
+        # DEBUG ALLOWLIST: Only visualize specific UIDs
+        DEBUG_ALLOWLIST_UIDS = [
+            "7805_9_0.7184458405769556",
+        ]
+
+
         # Get the relevant tensors
         prompts = tensor_batch.batch["prompts"]
         responses = tensor_batch.batch["responses"]
@@ -780,8 +870,16 @@ class AgentPPOTrainer(RayPPOTrainer):
         end_idx = min(sample_idx + max_samples, batch_size)
 
         for i in range(sample_idx, end_idx):
-            colorful_print(f"\n===== Sample {i} =====", fg="cyan", bold=True)
-
+            # Check if this sample's UID is in the allowlist
+            # if "uid" in tensor_batch.non_tensor_batch:
+            #     sample_uid = tensor_batch.non_tensor_batch["uid"][i]
+            #     if sample_uid not in DEBUG_ALLOWLIST_UIDS:
+            #         print(f"⏭️  Skipping sample {i} with UID: {sample_uid}")
+            #         continue  # Skip samples not in allowlist
+            #     print(f"🎯 Visualizing sample {i} with allowlisted UID: {sample_uid}")
+            # else:
+                # print(f"⚠️  No UID found in batch, visualizing sample {i} anyway")
+                
             # Detokenize prompt
             prompt_tokens = prompts[i]
             prompt_mask = prompt_tokens != self.tokenizer.pad_token_id
@@ -974,12 +1072,13 @@ class AgentPPOTrainer(RayPPOTrainer):
 
         result = DataProto.from_dict(tensors=tensor_batch, non_tensors=non_tensor_batch, meta_info=meta_info)
 
+        # self.visualize_trajectory(result, sample_idx=0, max_samples=len(non_tensor_batch["is_last_step"]))
         # Find indices of last steps for visualization
-        last_step_indices = [i for i, is_last in enumerate(non_tensor_batch["is_last_step"]) if is_last]
-        if last_step_indices:
-            sample_indices = np.random.choice(last_step_indices, size=min(2, len(last_step_indices)), replace=False)
-            for idx in sample_indices:
-                self.visualize_trajectory(result, sample_idx=idx, max_samples=1)
+        # last_step_indices = [i for i, is_last in enumerate(non_tensor_batch["is_last_step"]) if is_last]
+        # if last_step_indices:
+            # sample_indices = np.random.choice(last_step_indices, size=min(2, len(last_step_indices)), replace=False)
+            # for idx in sample_indices:
+                # self.visualize_trajectory(result, sample_idx=idx, max_samples=1)
         return result
 
     def _stepwise_advantage_broadcast(self, last_step_batch, other_step_batch):
@@ -1054,6 +1153,7 @@ class AgentPPOTrainer(RayPPOTrainer):
             return batch
 
         world_size = reduce(math.lcm, world_sizes)
+        print("World size was found to be this; ", world_size)
 
         original_batch_size = batch.batch["prompts"].shape[0]
         batch, pad_size = pad_dataproto_to_divisor(batch, world_size)
