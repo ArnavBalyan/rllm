@@ -29,7 +29,7 @@ class AgentExecutionEngine:
         self,
         engine_name="openai",
         tokenizer=None,
-        rollout_engine=None,
+        rollout_engines=None,
         chat_parser=None,
         n_parallel_agents=1,
         trajectory_timeout=None,
@@ -93,28 +93,36 @@ class AgentExecutionEngine:
 
         self.rollout_engine_args = rollout_engine_args
         self.sampling_params = kwargs.get("sampling_params", {})  # for openai api requests
+        
+        self.num_agents = len(rollout_engines)
 
         assert self.engine_name in ["openai", "verl"], "Currently only openai and verl are supported as rollout engine"
         if self.engine_name == "openai":
             from rllm.engine.rollout.openai_engine import OpenAIEngine
 
-            self.rollout_engine = OpenAIEngine(
-                **rollout_engine_args,
-                api_retries=api_retries,
-                tokenizer=self.tokenizer,
-                max_prompt_length=self.max_prompt_length,
-                max_response_length=self.max_response_length,
-                disable_thinking=kwargs.get("disable_thinking", False),
-            )
+            self.rollout_engines = [
+                OpenAIEngine(
+                    **rollout_engine_args,
+                    api_retries=api_retries,
+                    tokenizer=self.tokenizer,
+                    max_prompt_length=self.max_prompt_length,
+                    max_response_length=self.max_response_length,
+                    disable_thinking=kwargs.get("disable_thinking", False),
+                )
+                for _ in rollout_engines
+            ]
         elif self.engine_name == "verl":
             from rllm.engine.rollout.verl_engine import VerlEngine
 
-            self.rollout_engine = VerlEngine(
-                config=self.config,
-                rollout_manager=rollout_engine,
-                tokenizer=self.tokenizer,
-                disable_thinking=self.config.rllm.disable_thinking,
-            )
+            self.rollout_engines = [
+                VerlEngine(
+                    config=self.config,
+                    rollout_manager=manager,
+                    tokenizer=self.tokenizer,
+                    disable_thinking=self.config.rllm.disable_thinking,
+                )
+                for manager in rollout_engines
+            ]
 
         # Create a thread pool executor for environment interactions (i.e. step, reset, close)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
@@ -124,7 +132,7 @@ class AgentExecutionEngine:
         Compute model response asynchronously based on the engine type.
 
         This function is multithread safe and routes the request to the appropriate
-        engine-specific handler.
+        engine-specific handler. Calls all rollout engines and returns agent 0's response.
 
         Args:
             prompt: The input prompt to send to the model
@@ -132,7 +140,7 @@ class AgentExecutionEngine:
             **kwargs: Additional arguments to pass to the model
 
         Returns:
-            The model's response text
+            The model's response text (from agent 0)
 
         Raises:
             NotImplementedError: If the engine type is not supported
@@ -140,17 +148,26 @@ class AgentExecutionEngine:
 
         sampling_params = self.sampling_params.copy()
         sampling_params.update(kwargs)
-
-        if self.engine_name == "openai":
-            output = await self.rollout_engine.get_model_response(prompt, application_id=application_id, enforce_max_prompt_length=False, **sampling_params)
-            return output.text
-        elif self.engine_name == "verl":
-            meta_data = sampling_params.pop("meta_info", {})
-            validate = meta_data.get("validate", False)
-            output = await self.rollout_engine.get_model_response(prompt, application_id=application_id, validate=validate, enforce_max_prompt_length=False, **sampling_params)
-            return output.text
-        else:
-            raise NotImplementedError(f"Engine type '{self.engine_name}' not supported")
+        
+        # Call all rollout engines
+        agent_responses = {}
+        for agent_id, rollout_engine in enumerate(self.rollout_engines):
+            # Create a copy of sampling_params for each engine to avoid mutation
+            engine_sampling_params = sampling_params.copy()
+            
+            if self.engine_name == "openai":
+                output = await rollout_engine.get_model_response(prompt, application_id=application_id, enforce_max_prompt_length=False, **engine_sampling_params)
+                agent_responses[agent_id] = output.text
+            elif self.engine_name == "verl":
+                meta_data = engine_sampling_params.pop("meta_info", {})
+                validate = meta_data.get("validate", False)
+                output = await rollout_engine.get_model_response(prompt, application_id=application_id, validate=validate, enforce_max_prompt_length=False, **engine_sampling_params)
+                agent_responses[agent_id] = output.text
+            else:
+                raise NotImplementedError(f"Engine type '{self.engine_name}' not supported")
+        
+        # Return agent 0's response for trajectory execution
+        return agent_responses[0]
 
     def update_envs_and_agents(self, envs, agents):
         """
@@ -429,7 +446,8 @@ class AgentExecutionEngine:
         self.executor = ThreadPoolExecutor(max_workers=max_concurrency)
 
         if self.engine_name == "verl":
-            self.rollout_engine.wake_up()
+            for engine in self.rollout_engines:
+                engine.wake_up()
 
         async def launch_one_trajectory_task(env_idx: int):
             try:
@@ -463,7 +481,8 @@ class AgentExecutionEngine:
                 raise e
 
         if self.engine_name == "verl":
-            self.rollout_engine.sleep()
+            for engine in self.rollout_engines:
+                engine.sleep()
 
         self.executor.shutdown(wait=False, cancel_futures=True)
 

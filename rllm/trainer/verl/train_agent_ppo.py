@@ -12,6 +12,7 @@ from omegaconf import OmegaConf
 
 from rllm.trainer.env_agent_mappings import AGENT_CLASS_MAPPING, ENV_CLASS_MAPPING, WORKFLOW_CLASS_MAPPING
 from rllm.trainer.verl.agent_ppo_trainer import AgentPPOTrainer
+from rllm.trainer.verl.worker_group_manager import WorkerGroupManager
 
 # Local application imports
 from rllm.trainer.verl.agent_workflow_trainer import AgentWorkflowPPOTrainer
@@ -192,14 +193,21 @@ class TaskRunner:
             if config.rllm.agent.get("agent_args") is not None:
                 agent_args.update(config.rllm.agent.get("agent_args"))
 
-            trainer = AgentPPOTrainer(
+            # Create worker group manager
+            worker_group_manager = WorkerGroupManager(
                 config=config,
                 tokenizer=tokenizer,
                 role_worker_mapping=role_worker_mapping,
                 resource_pool_manager=resource_pool_manager,
                 ray_worker_group_cls=ray_worker_group_cls,
                 reward_fn=reward_fn,
-                val_reward_fn=val_reward_fn,
+                val_reward_fn=val_reward_fn
+            )
+
+            trainer = AgentPPOTrainer(
+                config=config,
+                tokenizer=tokenizer,
+                worker_group_managers=[worker_group_manager],  # Pass as list
                 env_class=env_class,
                 agent_class=agent_class,
                 env_args=env_args,

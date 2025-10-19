@@ -30,24 +30,25 @@ from verl.trainer.ppo.ray_trainer import (
     marked_timer,
     reduce_metrics,
 )
+from rllm.trainer.verl.worker_group_manager import WorkerGroupManager
 
 
-class AgentPPOTrainer(RayPPOTrainer):
+class AgentPPOTrainer:
     def __init__(
         self,
         config,
         tokenizer,
-        role_worker_mapping: dict[Role, WorkerType],
-        resource_pool_manager: ResourcePoolManager,
-        ray_worker_group_cls: RayWorkerGroup = RayWorkerGroup,
-        reward_fn=None,
-        val_reward_fn=None,
+        worker_group_managers: list[WorkerGroupManager],
         env_class=None,
         agent_class=None,
         env_args=None,
         agent_args=None,
     ):
-        super().__init__(config=config, tokenizer=tokenizer, role_worker_mapping=role_worker_mapping, resource_pool_manager=resource_pool_manager, ray_worker_group_cls=ray_worker_group_cls, reward_fn=reward_fn, val_reward_fn=val_reward_fn)
+        self.config = config
+        self.tokenizer = tokenizer
+        self.worker_group_managers = worker_group_managers
+        self.reward_fn = worker_group_managers[0].reward_fn
+        self.val_reward_fn = worker_group_managers[0].val_reward_fn
         self.env_class = env_class
         self.agent_class = agent_class
         self.env_args = env_args or {}
@@ -62,10 +63,15 @@ class AgentPPOTrainer(RayPPOTrainer):
             print("Using trajectory-level advantage, max_prompt_length and max_response_length will be applied episode-wise")
 
     def init_workers(self):
-        super().init_workers()
-
+        # Initialize all managers and collect their rollout engines
+        rollout_engines = []
+        for manager in self.worker_group_managers:
+            manager.init_and_get_worker_groups()
+            rollout_engines.append(manager.async_rollout_manager)
+        
+        # Create single execution engine with all rollout engines
         self.agent_execution_engine = AsyncAgentExecutionEngine(
-            rollout_engine=self.async_rollout_manager,
+            rollout_engines=rollout_engines,
             config=self.config,
             engine_name="verl",
             tokenizer=self.tokenizer,
@@ -132,10 +138,11 @@ class AgentPPOTrainer(RayPPOTrainer):
             config=OmegaConf.to_container(self.config, resolve=True),
         )
 
-        self.global_steps = 0
+        manager = self.worker_group_managers[0]
+        manager.global_steps = 0
 
         # load checkpoint before doing anything
-        self._load_checkpoint()
+        manager._load_checkpoint()
 
         # perform validation before training
         import time
@@ -144,16 +151,16 @@ class AgentPPOTrainer(RayPPOTrainer):
         if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
             val_metrics = self._validate_agent()
             pprint(f"Initial validation metrics: {val_metrics}")
-            logger.log(data=val_metrics, step=self.global_steps)
+            logger.log(data=val_metrics, step=manager.global_steps)
             if self.config.trainer.get("val_only", False):
                 return
         print(f"Time taken to validate agent: {time.time() - start_time}")
         # we start from step 1
-        self.global_steps += 1
+        manager.global_steps += 1
 
         for epoch in range(self.config.trainer.total_epochs):
-            pprint(f"epoch {epoch}, step {self.global_steps} started")
-            for batch_dict in self.train_dataloader:
+            pprint(f"epoch {epoch}, step {manager.global_steps} started")
+            for batch_dict in manager.train_dataloader:
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
                 batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))], dtype=object)
                 batch = batch.repeat(
@@ -184,15 +191,15 @@ class AgentPPOTrainer(RayPPOTrainer):
                         metrics.update(generate_metrics)
 
                     # compute values
-                    if self.use_critic:
+                    if self.worker_group_managers[0].use_critic:
                         with marked_timer("values", timing_raw):
-                            values = self.critic_wg.compute_values(batch)
+                            values = self.worker_group_managers[0].critic_wg.compute_values(batch)
                             batch = batch.union(values)
 
                     with marked_timer("adv", timing_raw):
                         # compute scores using reward model and/or reward function
-                        if self.use_rm:
-                            reward_tensor = self.rm_wg.compute_rm_score(batch)
+                        if self.worker_group_managers[0].use_rm:
+                            reward_tensor = self.worker_group_managers[0].rm_wg.compute_rm_score(batch)
                             batch = batch.union(reward_tensor)
 
                         # reward tensor for env-based trajectory data can be obtained by processing the trajectories
@@ -267,7 +274,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                                 non_last_step_batch = batch.select_idxs(not_last_step_indices)
 
                                 # filter last_step_batch to make sure its multiple of world size
-                                num_trainer_replicas = self.actor_rollout_wg.world_size
+                                num_trainer_replicas = self.worker_group_managers[0].actor_rollout_wg.world_size
                                 max_batch_size = (
                                     last_step_batch.batch["input_ids"].shape[0]  # 1 per trajectory
                                     // num_trainer_replicas
@@ -291,7 +298,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                                 batch = self._pad_dataproto_to_world_size(batch)
                             else:
                                 # Round down to the nearest multiple of world size
-                                num_trainer_replicas = self.actor_rollout_wg.world_size
+                                num_trainer_replicas = self.worker_group_managers[0].actor_rollout_wg.world_size
                                 max_batch_size = (batch.batch["input_ids"].shape[0] // num_trainer_replicas) * num_trainer_replicas
                                 if not max_batch_size:
                                     # give up, you got everything either all wrong or right.
@@ -303,12 +310,12 @@ class AgentPPOTrainer(RayPPOTrainer):
 
                         # recompute old_log_probs
                         with marked_timer("old_log_prob", timing_raw):
-                            old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
+                            old_log_prob = self.worker_group_managers[0].actor_rollout_wg.compute_log_prob(batch)
                             batch = batch.union(old_log_prob)
 
                         # recompute old_log_probs
                         with marked_timer("old_log_prob", timing_raw, color="blue"):
-                            old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
+                            old_log_prob = self.worker_group_managers[0].actor_rollout_wg.compute_log_prob(batch)
                             entropys = old_log_prob.batch["entropys"]
                             response_masks = batch.batch["response_mask"]
                             loss_agg_mode = self.config.actor_rollout_ref.actor.loss_agg_mode
@@ -342,10 +349,10 @@ class AgentPPOTrainer(RayPPOTrainer):
                                     }
                                 )
 
-                        if self.use_reference_policy:
+                        if self.worker_group_managers[0].use_reference_policy:
                             # compute reference log_prob
                             with marked_timer("ref", timing_raw):
-                                ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
+                                ref_log_prob = self.worker_group_managers[0].ref_policy_wg.compute_ref_log_prob(batch)
                                 batch = batch.union(ref_log_prob)
 
                         # compute rewards with KL penalty if needed
@@ -407,58 +414,59 @@ class AgentPPOTrainer(RayPPOTrainer):
                     # balance the number of valid tokens on each dp rank.
                     # Note that this breaks the order of data inside the batch.
                     # Please take care when you implement group based adv computation such as GRPO and rloo
-                    self._balance_batch(batch, metrics=metrics)
+                    manager._balance_batch(batch, metrics=metrics)
 
                     # compute global_valid tokens
                     batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
 
                     # update critic
-                    if self.use_critic:
+                    if self.worker_group_managers[0].use_critic:
                         with marked_timer("update_critic", timing_raw):
-                            critic_output = self.critic_wg.update_critic(batch)
+                            critic_output = self.worker_group_managers[0].critic_wg.update_critic(batch)
                         critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
                         metrics.update(critic_output_metrics)
 
                     # implement critic warmup
-                    if self.config.trainer.critic_warmup <= self.global_steps:
+                    if self.config.trainer.critic_warmup <= manager.global_steps:
                         # update actor
                         with marked_timer("update_actor", timing_raw):
-                            actor_output = self.actor_rollout_wg.update_actor(batch)
+                            actor_output = self.worker_group_managers[0].actor_rollout_wg.update_actor(batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                         metrics.update(actor_output_metrics)
 
                     # validate
-                    if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
+                    if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and manager.global_steps % self.config.trainer.test_freq == 0:
                         with marked_timer("testing", timing_raw):
                             val_metrics: dict = self._validate_agent()
                         metrics.update(val_metrics)
 
-                    if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
+                    if self.config.trainer.save_freq > 0 and manager.global_steps % self.config.trainer.save_freq == 0:
                         with marked_timer("save_checkpoint", timing_raw):
-                            self._save_checkpoint()
+                            manager._save_checkpoint()
 
                 # collect metrics
-                metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
+                metrics.update(compute_data_metrics(batch=batch, use_critic=self.worker_group_managers[0].use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
 
                 # TODO: make a canonical logger that supports various backend
-                logger.log(data=metrics, step=self.global_steps)
+                logger.log(data=metrics, step=manager.global_steps)
 
-                self.global_steps += 1
+                manager.global_steps += 1
 
-                if self.global_steps >= self.total_training_steps:
+                if manager.global_steps >= manager.total_training_steps:
                     # perform validation after training
                     if self.val_reward_fn is not None:
                         val_metrics = self._validate_agent()
                         pprint(f"Final validation metrics: {val_metrics}")
-                        logger.log(data=val_metrics, step=self.global_steps)
+                        logger.log(data=val_metrics, step=manager.global_steps)
                     return
 
     def _validate_agent(self):
+        manager = self.worker_group_managers[0]
         rewards_lst = []
         data_source_lst = []
         uid_lst = []
-        for test_data in self.val_dataloader:
+        for test_data in manager.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
             test_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(test_batch.batch))], dtype=object)
             n_val_samples = self.config.actor_rollout_ref.rollout.val_kwargs.n
@@ -547,20 +555,24 @@ class AgentPPOTrainer(RayPPOTrainer):
         """
         if timing_raw is None:
             timing_raw = {}
+        
         with marked_timer("collect_trajectory", timing_raw):
-            trajectories = []
-            if self.async_rollout_mode:
-                gen_seq_generator = self.generate_agent_trajectories_async(timing_raw=timing_raw, meta_info=meta_info, mode="Token")
-                for _, trajectory in enumerate(gen_seq_generator):
-                    trajectories.append(trajectory)
-            else:
+            if not self.worker_group_managers[0].async_rollout_mode:
                 raise ValueError("Only async rollout mode is supported")
-        # Sort trajectories by their idx, to ensure they are in order.
+            
+            # Collect trajectories (each trajectory internally queried all agents)
+            trajectories = []
+            gen_seq_generator = self.generate_agent_trajectories_async(timing_raw=timing_raw, meta_info=meta_info, mode="Token")
+            for _, trajectory in enumerate(gen_seq_generator):
+                trajectories.append(trajectory)
+        
+        # Sort trajectories by their idx, to ensure they are in order
         trajectories.sort(key=lambda x: x["idx"])
-
+        
         with marked_timer("transform_trajectory", timing_raw):
-            # Transform the raw trajectories into DataProto format.
+            # Transform the raw trajectories into DataProto format
             final_gen_batch_output, metrics = self._transform_agent_trajectories(trajectories)
+        
         return final_gen_batch_output, metrics
 
     def generate_agent_steps(self, timing_raw=None, meta_info=None, uids=None):
@@ -637,10 +649,11 @@ class AgentPPOTrainer(RayPPOTrainer):
             )
 
         # Save chat completions to a file
+        manager = self.worker_group_managers[0]
         save_dir = os.path.join(self.config.trainer.default_local_dir, "chat_completions")
         os.makedirs(save_dir, exist_ok=True)
-        # Save it into a jsonl files (self.global_steps)
-        with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
+        # Save it into a jsonl files (global_steps)
+        with open(os.path.join(save_dir, f"{manager.global_steps}.jsonl"), "w") as f:
             for chat_completion in chat_completions:
                 f.write(json.dumps(chat_completion) + "\n")
 
@@ -1015,15 +1028,15 @@ class AgentPPOTrainer(RayPPOTrainer):
 
     def _pad_dataproto_to_world_size(self, batch):
         world_sizes = []
-        if self.use_critic and self.critic_wg.world_size != 0:
-            world_sizes.append(self.critic_wg.world_size)
-        if self.use_reference_policy and self.ref_policy_wg.world_size != 0:
-            world_sizes.append(self.ref_policy_wg.world_size)
-        if self.use_rm and self.rm_wg.world_size != 0:
-            world_sizes.append(self.rm_wg.world_size)
-        if self.hybrid_engine:
-            if self.actor_rollout_wg.world_size != 0:
-                world_sizes.append(self.actor_rollout_wg.world_size)
+        if self.worker_group_managers[0].use_critic and self.worker_group_managers[0].critic_wg.world_size != 0:
+            world_sizes.append(self.worker_group_managers[0].critic_wg.world_size)
+        if self.worker_group_managers[0].use_reference_policy and self.worker_group_managers[0].ref_policy_wg.world_size != 0:
+            world_sizes.append(self.worker_group_managers[0].ref_policy_wg.world_size)
+        if self.worker_group_managers[0].use_rm and self.worker_group_managers[0].rm_wg.world_size != 0:
+            world_sizes.append(self.worker_group_managers[0].rm_wg.world_size)
+        if self.worker_group_managers[0].hybrid_engine:
+            if self.worker_group_managers[0].actor_rollout_wg.world_size != 0:
+                world_sizes.append(self.worker_group_managers[0].actor_rollout_wg.world_size)
         else:
             if self.actor_wg.world_size != 0:
                 world_sizes.append(self.actor_wg.world_size)
