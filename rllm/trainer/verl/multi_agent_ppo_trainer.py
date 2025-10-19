@@ -101,7 +101,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
             agent_id = agent_config.agent_id
             
             # Create separate resource pool for this agent
-            agent_resource_pool_spec = {f"{agent_id}_pool": [2]}  # 2 GPUs per agent
+            agent_resource_pool_spec = {f"{agent_id}_pool": [8]}  # 2 GPUs per agent
             agent_mapping = {Role.ActorRollout: f"{agent_id}_pool"}
             agent_rpm = ResourcePoolManager(agent_resource_pool_spec, agent_mapping)
             agent_rpm.create_resource_pool()
@@ -321,7 +321,7 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         ).flip(dims=[1])
         
         prompts_batch = pad_sequence_to_length(prompts_batch, self.config.data.max_prompt_length, self.tokenizer.pad_token_id, left_pad=True)
-        
+        print("Printing pad token id: ", self.tokenizer.pad_token_id)
         response_batch = torch.nn.utils.rnn.pad_sequence(
             all_response_tokens_list,
             batch_first=True,
@@ -329,8 +329,10 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
         )
         
         max_response_length = self.config.data.max_response_length
+        print("Printing max response length ", max_response_length)
+        print("Printing response batch: ", response_batch)
         response_batch = pad_sequence_to_length(response_batch, max_response_length, self.tokenizer.pad_token_id, left_pad=False)
-        
+        print("Printing new response batch: ", response_batch)
         traj_mask = torch.nn.utils.rnn.pad_sequence(all_masks_list, batch_first=True, padding_value=0)
         traj_mask = pad_sequence_to_length(traj_mask, max_response_length, 0, left_pad=False)
         
@@ -599,9 +601,11 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                                 size_mask[:max_batch_size] = True
                                 batch = batch[size_mask]
 
+                            input_ids = batch.batch["input_ids"]
+                            print(f"[Agent {agent_id}] input_ids - min: {input_ids.min().item()}, max: {input_ids.max().item()}, mean: {input_ids.float().mean().item():.2f}")
+
                             with _timer("old_log_prob", timing_raw):
-                                agent_worker_group = self.agent_rollout_engines[agent_id].worker_group
-                                old_log_prob = agent_worker_group.compute_log_prob(batch)
+                                old_log_prob = self.agent_rollout_engines[agent_id].compute_log_prob(batch)
                                 batch = batch.union(old_log_prob)
 
                             batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
@@ -681,15 +685,25 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                                 'non_tensor_batch': to_json_safe(batch.non_tensor_batch),
                                 'meta_info': to_json_safe(batch.meta_info),
                             }
-                            with open(json_path, 'w') as f:
-                                json.dump(json_data, f, indent=None)
-                            print(f"📄 [MULTI AGENT {agent_id}] Saved JSON snapshot to: {json_path}")
+                            # with open(json_path, 'w') as f:
+                            #     json.dump(json_data, f, indent=None)
+                            # print(f"📄 [MULTI AGENT {agent_id}] Saved JSON snapshot to: {json_path}")
 
                             with _timer("update_actor", timing_raw):
+                                print(f"🔧 [arnavb] update_actor: prefix={self.actor_rollout_wg.worker_group.name_prefix} workers={self.actor_rollout_wg.worker_group._worker_names}")
+                                
                                 agent_worker_group = self.agent_rollout_engines[agent_id].worker_group
-                                actor_output = agent_worker_group.update_actor(batch)
+                                # Log training worker info
+                                train_actor_ids = [w._ray_actor_id.hex() for w in agent_worker_group.workers]
+                                print(f"🔧 [TRAIN {agent_id}] update_actor: prefix={agent_worker_group.name_prefix} names={agent_worker_group._worker_names} actor_ids={train_actor_ids}")
+
+                                actor_output = self.agent_rollout_engines[agent_id].update_actor(batch)
                                 
                             actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
+                            adv = batch.batch['advantages']
+                            olp = batch.batch['old_log_probs']
+                            print(f"📊 [step={self.global_steps}] adv[{adv.min():.8f},{adv.mean():.8f},{adv.max():.8f}] olp[{olp.min():.8f},{olp.mean():.8f},{olp.max():.8f}] kl={actor_output_metrics.get('actor/approx_kl', 0):.10f} ent={actor_output_metrics.get('actor/entropy', 0):.8f}")
+
                             metrics_global[agent_id].update(actor_output_metrics)
                             # Sync updated weights to rollout workers (same as RayPPOAsyncTrainer lines 262-266)
 
@@ -722,8 +736,8 @@ class MultiAgentPPOTrainer(AgentPPOTrainer):
                 
                 logger.log(data=metrics_global, step=self.global_steps)
                 self.global_steps += 1
-                # if self.global_steps == 35:
-                #     raise Exception("Stopping here")
+                if self.global_steps == 3:
+                    raise Exception("Stopping here")
                 if self.global_steps >= self.total_training_steps:
                     if self.val_reward_fn is not None:
                         print("Validating the Mutli agent loop")

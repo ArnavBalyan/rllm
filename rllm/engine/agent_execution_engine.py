@@ -173,6 +173,10 @@ class AgentExecutionEngine:
         if "max_tokens" in kwargs:
             batch.meta_info["max_tokens"] = kwargs["max_tokens"]
 
+        print(f"[arnavb] generate prefix={self.rollout_engine.worker_group.name_prefix} workers={[str(w) for w in self.rollout_engine.worker_group.workers]}")
+        gen_wg = self.rollout_engine.worker_group if hasattr(self.rollout_engine, 'worker_group') else self.rollout_engine
+        gen_actor_ids = [w._ray_actor_id.hex() for w in gen_wg.workers]
+        print(f"🎲 [GEN {agent_id}] generate: prefix={gen_wg.name_prefix} names={gen_wg._worker_names} actor_ids={gen_actor_ids}")
         output = await self.router.generate_sequences(
             batch, 
             application_id=application_id, 
@@ -268,6 +272,24 @@ class AgentExecutionEngine:
         # for step return
         episode_steps = []
 
+        replay_responses = {}
+        if 'meta_info' in kwargs and kwargs['meta_info']:
+            import os
+            import json
+            meta = kwargs['meta_info']
+            log_dir = meta['log_dir']
+            log_file = os.path.join(log_dir, f"step_{meta['global_step']}.jsonl")
+            
+            if os.path.exists(log_file):
+                print(f"🎬 [REPLAY ENV {idx}] Loading responses from {log_file}")
+                with open(log_file, 'r') as f:
+                    for line in f:
+                        entry = json.loads(line.strip())
+                        key = (entry['env_idx'], entry['board_desc'], entry['step_idx'])
+                        replay_responses[key] = entry['response']
+                print(f"🎬 [REPLAY ENV {idx}] Loaded {len(replay_responses)} responses")
+
+
         # Reset environment with the task using the executor
         loop = asyncio.get_event_loop()
         observation, info = await loop.run_in_executor(self.executor, env.reset)
@@ -310,8 +332,18 @@ class AgentExecutionEngine:
                     break
 
             kwargs["max_tokens"] = max_tokens
+            
+            # 🔍 DEBUG: Log token budget for generation
             print(f"🔍 [SINGLE-AGENT ENV {idx}] step={step_idx}: max_tokens={max_tokens} response_token_len={response_token_len} max_response_length={self.max_response_length}")
 
+            # 🎬 REPLAY: Check if we have a replay response
+            # replay_key = (env.idx, '\n'.join(env.preserved_desc), step_idx)
+            # if replay_key in replay_responses:
+            #     response = replay_responses[replay_key]
+            #     print(f"🎬 [REPLAY ENV {idx}] step={step_idx}: Using replayed response (len={len(response)} chars)")
+            #     delta_time = 0.0  # No LLM time for replayed responses
+            # else:
+            #     raise Exception("Not able to load replay")
             start_time = time.time()
             response = await self.get_model_response(
                 prompt_messages,
@@ -320,10 +352,13 @@ class AgentExecutionEngine:
                 step_id=step_idx,
                 **kwargs
             )
-     
+            
+            # 🔍 DEBUG: Log response length
+            print(f"🔍 [SINGLE-AGENT ENV {idx}] step={step_idx}: Generated response_len={len(response)} chars")
+            delta_time = time.time() - start_time
+            
             # 🎯 LOG RAW MODEL RESPONSE for replay (save immediately after generation)
             if 'meta_info' in kwargs and kwargs['meta_info']:
-                print("Saving the output to log" + str(env.idx) + str(env.preserved_desc))
                 import os
                 import json
                 meta = kwargs['meta_info']
@@ -337,9 +372,9 @@ class AgentExecutionEngine:
                         'step_idx': step_idx,
                         'response': response
                     }) + '\n')
-            print(f"🔍 [SINGLE-AGENT ENV {idx}] step={step_idx}: Generated response_len={len(response)} chars")
-
+            
             delta_time = time.time() - start_time
+            # delta_time = time.time() - 0
             llm_time += delta_time
             total_time += delta_time
             # Update steps

@@ -485,10 +485,18 @@ class AgentPPOTrainer(RayPPOTrainer):
                             json.dump(json_data, f, indent=None)
                         print(f"📄 [SINGLE AGENT] Saved JSON snapshot to: {json_path}")
 
+                        input_ids = batch.batch["input_ids"]
+                        print(f"[SINGLE Agent input_ids - min: {input_ids.min().item()}, max: {input_ids.max().item()}, mean: {input_ids.float().mean().item():.2f}")
+
 
                         with _timer("update_actor", timing_raw):
                             actor_output = self.actor_rollout_wg.update_actor(batch)
+                            print(f"🔧 [arnavb] update_actor: prefix={self.actor_rollout_wg.name_prefix} workers={self.actor_rollout_wg._worker_names}")
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
+                        adv = batch.batch['advantages']
+                        olp = batch.batch['old_log_probs']
+                        print(f"📊 [step={self.global_steps}] adv[{adv.min():.8f},{adv.mean():.8f},{adv.max():.8f}] olp[{olp.min():.8f},{olp.mean():.8f},{olp.max():.8f}] kl={actor_output_metrics.get('actor/approx_kl', 0):.10f} ent={actor_output_metrics.get('actor/entropy', 0):.8f}")
+
                         metrics.update(actor_output_metrics)
 
                     # validate
@@ -509,7 +517,7 @@ class AgentPPOTrainer(RayPPOTrainer):
                 logger.log(data=metrics, step=self.global_steps)
 
                 self.global_steps += 1
-                if self.global_steps == 35:
+                if self.global_steps == 3:
                     raise Exception("Stopping here")
                 if self.global_steps >= self.total_training_steps:
                     # perform validation after training
@@ -632,14 +640,14 @@ class AgentPPOTrainer(RayPPOTrainer):
         trajectories.sort(key=lambda x: x["idx"])
 
         # Save response text logs to understand tokenization
-        import os, json
-        save_dir = os.path.join(self.config.trainer.default_local_dir, "response_text_logs")
-        os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, f"{getattr(self, 'global_steps', 0)}.jsonl"), "w") as f:
-            for traj in trajectories:
-                if "response_text_log" in traj:
-                    log_entry = {"idx": traj["idx"], "uid": traj.get("uid", "unknown"), "response_text_log": traj["response_text_log"]}
-                    f.write(json.dumps(log_entry) + "\n")
+        # import os, json
+        # save_dir = os.path.join(self.config.trainer.default_local_dir, "response_text_logs")
+        # os.makedirs(save_dir, exist_ok=True)
+        # with open(os.path.join(save_dir, f"{getattr(self, 'global_steps', 0)}.jsonl"), "w") as f:
+        #     for traj in trajectories:
+        #         if "response_text_log" in traj:
+        #             log_entry = {"idx": traj["idx"], "uid": traj.get("uid", "unknown"), "response_text_log": traj["response_text_log"]}
+        #             f.write(json.dumps(log_entry) + "\n")
 
         with _timer("transform_trajectory", timing_raw):
             # Transform the raw trajectories into DataProto format.
@@ -759,16 +767,19 @@ class AgentPPOTrainer(RayPPOTrainer):
         ).flip(dims=[1])
 
         prompts_batch = pad_sequence_to_length(prompts_batch, self.config.data.max_prompt_length, self.tokenizer.pad_token_id, left_pad=True)
+        print("Printing pad token id: ", self.tokenizer.pad_token_id)
 
         response_batch = torch.nn.utils.rnn.pad_sequence(
             all_response_tokens_list,
             batch_first=True,
             padding_value=self.tokenizer.pad_token_id,
         )
-
+        print("Printing response batch, ", response_batch)
         max_response_length = self.config.data.max_response_length
+        print("Printing max res length, ", self.config.data.max_response_length)
         response_batch = pad_sequence_to_length(response_batch, max_response_length, self.tokenizer.pad_token_id, left_pad=False)
 
+        print("Printing new response batch, ", response_batch)
         traj_mask = torch.nn.utils.rnn.pad_sequence(all_masks_list, batch_first=True, padding_value=0)
         traj_mask = pad_sequence_to_length(traj_mask, max_response_length, 0, left_pad=False)
 
