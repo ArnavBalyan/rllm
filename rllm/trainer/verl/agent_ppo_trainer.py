@@ -16,6 +16,7 @@ from omegaconf import OmegaConf
 from rllm.engine.agent_execution_engine import AsyncAgentExecutionEngine
 from verl import DataProto
 from verl.protocol import pad_dataproto_to_divisor
+from copy import deepcopy
 from verl.trainer.ppo.core_algos import agg_loss
 from verl.trainer.ppo.ray_trainer import (
     RayPPOTrainer,
@@ -53,6 +54,7 @@ class AgentPPOTrainer:
         self.agent_class = agent_class
         self.env_args = env_args or {}
         self.agent_args = agent_args or {}
+        self.global_steps = 0
 
         assert self.config.actor_rollout_ref.hybrid_engine, "Only hybrid engine is supported"
         assert self.config.actor_rollout_ref.rollout.mode == "async", "Only async rollout mode is supported"
@@ -115,13 +117,24 @@ class AgentPPOTrainer:
                 idx, env = future.result()
                 envs[idx] = env
 
-        # Create agents in parallel while preserving order
-        agents = [None] * len(envs)
+        # Create agents for each environment and rollout engine (num_envs x num_agents)
+        # agents[env_idx][agent_id] = agent for environment env_idx and rollout engine agent_id
+        num_agents = len(self.worker_group_managers)
+        agents = [[None] * num_agents for _ in range(len(envs))]
+        
+        def _create_agent_for_env_and_agent_id(env_idx, agent_id):
+            return env_idx, agent_id, self.agent_class(**full_agent_args)
+        
         with ThreadPoolExecutor(max_workers=64) as executor:
-            agent_futures = [executor.submit(_create_agent, i) for i in range(len(envs))]
-            for future in as_completed(agent_futures):
-                idx, agent = future.result()
-                agents[idx] = agent
+            futures = []
+            for env_idx in range(len(envs)):
+                for agent_id in range(num_agents):
+                    futures.append(executor.submit(_create_agent_for_env_and_agent_id, env_idx, agent_id))
+            
+            for future in as_completed(futures):
+                env_idx, agent_id, agent = future.result()
+                agents[env_idx][agent_id] = agent
+        
         self.agent_execution_engine.update_envs_and_agents(envs, agents)
         return envs
 
@@ -139,7 +152,6 @@ class AgentPPOTrainer:
         )
 
         manager = self.worker_group_managers[0]
-        manager.global_steps = 0
 
         # load checkpoint before doing anything
         manager._load_checkpoint()
@@ -151,15 +163,15 @@ class AgentPPOTrainer:
         if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
             val_metrics = self._validate_agent()
             pprint(f"Initial validation metrics: {val_metrics}")
-            logger.log(data=val_metrics, step=manager.global_steps)
+            logger.log(data=val_metrics, step=self.global_steps)
             if self.config.trainer.get("val_only", False):
                 return
         print(f"Time taken to validate agent: {time.time() - start_time}")
         # we start from step 1
-        manager.global_steps += 1
+        self.global_steps += 1
 
         for epoch in range(self.config.trainer.total_epochs):
-            pprint(f"epoch {epoch}, step {manager.global_steps} started")
+            pprint(f"epoch {epoch}, step {self.global_steps} started")
             for batch_dict in manager.train_dataloader:
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
                 batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))], dtype=object)
@@ -176,289 +188,311 @@ class AgentPPOTrainer:
                 with marked_timer("step", timing_raw):
                     self.init_envs_and_agents(batch)
 
+                    # Generate trajectories for all agents
                     if self.config.rllm.stepwise_advantage.enable:
+                        # For stepwise advantage mode, generate steps for all agents
+                        # TODO: Make generate_agent_steps return per-agent outputs
                         final_gen_batch_output = self.generate_agent_steps(timing_raw=timing_raw, meta_info=batch.meta_info, uids=batch.non_tensor_batch["uid"])
                         repeat_counts = final_gen_batch_output.meta_info["repeat_counts"]
                         # need to repeat to make shape match
                         batch = batch.sample_level_repeat(repeat_counts)
                         final_gen_batch_output.meta_info.pop("repeat_counts", None)  # no longer needed after this
-                        # batch needs to be padded to divisor of world size, we will pad with everything masked out
-                        batch = batch.union(final_gen_batch_output)
-                        batch = self._pad_dataproto_to_world_size(batch=batch)
+                        # For now, all agents share the same steps output
+                        agent_outputs = {agent_id: (final_gen_batch_output, {}) for agent_id in range(len(self.worker_group_managers))}
                     else:
-                        final_gen_batch_output, generate_metrics = self.generate_agent_trajectory(timing_raw=timing_raw, meta_info=batch.meta_info)
-                        batch = batch.union(final_gen_batch_output)
-                        metrics.update(generate_metrics)
+                        # Generate trajectories for all agents (returns dict of per-agent outputs)
+                        agent_outputs = self.generate_agent_trajectory(timing_raw=timing_raw, meta_info=batch.meta_info)
+                    
+                    final_batch = None 
+                    # Process each agent separately
+                    for agent_id, agent_manager in enumerate(self.worker_group_managers):
+                        # Extract this agent's trajectory output and union with prompts
+                        final_gen_batch_output, generate_metrics = agent_outputs[agent_id]
 
-                    # compute values
-                    if self.worker_group_managers[0].use_critic:
-                        with marked_timer("values", timing_raw):
-                            values = self.worker_group_managers[0].critic_wg.compute_values(batch)
-                            batch = batch.union(values)
 
-                    with marked_timer("adv", timing_raw):
-                        # compute scores using reward model and/or reward function
-                        if self.worker_group_managers[0].use_rm:
-                            reward_tensor = self.worker_group_managers[0].rm_wg.compute_rm_score(batch)
-                            batch = batch.union(reward_tensor)
-
-                        # reward tensor for env-based trajectory data can be obtained by processing the trajectories
-                        if "token_level_scores" not in batch.batch:
-                            reward_tensor = self.reward_fn(batch)
-                            batch.batch["token_level_scores"] = reward_tensor
-                        else:
-                            reward_tensor = batch.batch["token_level_scores"]  # filled in by environment collected trajectory transformation
-
-                        # Rejection sampling based on rewards
-                        # Group rewards by uid
-                        uids = batch.non_tensor_batch["uid"]
-                        unique_uids = np.unique(uids)
-                        valid_mask = torch.ones(len(uids), dtype=torch.bool)
-                        solve_none = 0
-                        solve_all = 0
-                        for uid in unique_uids:
-                            uid_mask = uids == uid
-                            uid_rewards = reward_tensor[uid_mask].sum(-1)  # Sum rewards for each sequence
-
-                            # Check if all rewards are <= 0 or all are 1 >= for this uid
-                            if (uid_rewards <= 0).all():
-                                valid_mask[uid_mask] = False
-                                solve_none += 1
-                            elif (uid_rewards >= 1).all():
-                                valid_mask[uid_mask] = False
-                                solve_all += 1
-
-                        # Log to metrics
-                        metrics["batch/solve_none"] = solve_none
-                        metrics["batch/solve_all"] = solve_all
-                        metrics["batch/solve_partial"] = len(unique_uids) - solve_none - solve_all
-
-                        if self.config.rllm.rejection_sample.enable:
-                            # log the actual complete training rewards before rejection sampling
-                            token_level_rewards = None  # for metrics calculation
-                            if self.config.rllm.stepwise_advantage.enable:
-                                is_pad_step = batch.non_tensor_batch["is_pad_step"]
-                                non_pad_step_indices = np.where(is_pad_step == False)[0]
-                                non_pad_steps = batch.select_idxs(non_pad_step_indices)
-                                is_last_step = non_pad_steps.non_tensor_batch["is_last_step"]
-                                valid_last_step_indices = np.where(is_last_step == True)[0]
-                                last_step_batch = batch.select_idxs(valid_last_step_indices)
-                                token_level_rewards = last_step_batch.batch["token_level_scores"]
-                            else:
-                                token_level_rewards = batch.batch["token_level_scores"]
-                            full_sequence_score = token_level_rewards.sum(-1)
-                            metrics["critic/full-score/mean"] = torch.mean(full_sequence_score).detach().item()
-                            metrics["critic/full-score/max"] = torch.max(full_sequence_score).detach().item()
-                            metrics["critic/full-score/min"] = torch.min(full_sequence_score).detach().item()
-
-                            # If no valid samples remain, skip this batch and get a new one
-                            if not valid_mask.any():
-                                continue
-
-                            # Filter batch to keep only valid samples
-                            batch = batch[valid_mask]
-
-                            if self.config.rllm.stepwise_advantage.enable and self.config.rllm.stepwise_advantage.mode == "broadcast":
-                                # batch now only contains steps with valid uids
-                                # filter out padding steps
-                                is_pad_step = batch.non_tensor_batch["is_pad_step"]
-                                non_pad_step_indices = np.where(is_pad_step == False)[0]
-                                batch = batch.select_idxs(non_pad_step_indices)  # This batch only has non_pad steps
-
-                                # need to make sure both number of last steps (number of uids) and number of total steps in the batch (batch size after processing) are all multiples of world size
-                                # separate out last step and intermediate steps
-                                is_last_step = batch.non_tensor_batch["is_last_step"]
-                                valid_last_step_indices = np.where(is_last_step == True)[0]
-                                not_last_step_indices = np.where(is_last_step == False)[0]
-                                last_step_batch = batch.select_idxs(valid_last_step_indices)  # This batch only has valid last steps
-                                non_last_step_batch = batch.select_idxs(not_last_step_indices)
-
-                                # filter last_step_batch to make sure its multiple of world size
-                                num_trainer_replicas = self.worker_group_managers[0].actor_rollout_wg.world_size
-                                max_batch_size = (
-                                    last_step_batch.batch["input_ids"].shape[0]  # 1 per trajectory
-                                    // num_trainer_replicas
-                                ) * num_trainer_replicas
-                                if not max_batch_size:
-                                    # give up, you got everything either all wrong or right.
-                                    continue
-
-                                size_mask = torch.zeros(last_step_batch.batch["input_ids"].shape[0], dtype=torch.bool)
-                                size_mask[:max_batch_size] = True
-                                last_step_batch = last_step_batch[size_mask]  # filtered last steps
-
-                                # now we go through all the non_last_step_batch and keep everything that has same idxs that exists in the filtered last steps
-                                valid_last_step_idxs = last_step_batch.non_tensor_batch["idxs"]
-                                non_last_step_idxs = non_last_step_batch.non_tensor_batch["idxs"]
-                                non_last_step_mask = np.isin(non_last_step_idxs, valid_last_step_idxs)
-                                non_last_step_batch = non_last_step_batch[non_last_step_mask]
-
-                                # concatenate then pad
-                                batch = DataProto.concat([last_step_batch, non_last_step_batch])
-                                batch = self._pad_dataproto_to_world_size(batch)
-                            else:
-                                # Round down to the nearest multiple of world size
-                                num_trainer_replicas = self.worker_group_managers[0].actor_rollout_wg.world_size
-                                max_batch_size = (batch.batch["input_ids"].shape[0] // num_trainer_replicas) * num_trainer_replicas
-                                if not max_batch_size:
-                                    # give up, you got everything either all wrong or right.
-                                    continue
-
-                                size_mask = torch.zeros(batch.batch["input_ids"].shape[0], dtype=torch.bool)
-                                size_mask[:max_batch_size] = True
-                                batch = batch[size_mask]
-
-                        # recompute old_log_probs
-                        with marked_timer("old_log_prob", timing_raw):
-                            old_log_prob = self.worker_group_managers[0].actor_rollout_wg.compute_log_prob(batch)
-                            batch = batch.union(old_log_prob)
-
-                        # recompute old_log_probs
-                        with marked_timer("old_log_prob", timing_raw, color="blue"):
-                            old_log_prob = self.worker_group_managers[0].actor_rollout_wg.compute_log_prob(batch)
-                            entropys = old_log_prob.batch["entropys"]
-                            response_masks = batch.batch["response_mask"]
-                            loss_agg_mode = self.config.actor_rollout_ref.actor.loss_agg_mode
-                            entropy_agg = agg_loss(loss_mat=entropys, loss_mask=response_masks, loss_agg_mode=loss_agg_mode)
-                            old_log_prob_metrics = {"actor/entropy": entropy_agg.detach().item()}
-                            metrics.update(old_log_prob_metrics)
-                            old_log_prob.batch.pop("entropys")
-                            batch = batch.union(old_log_prob)
-
-                            if "rollout_log_probs" in batch.batch.keys():
-                                # TODO: we may want to add diff of probs too.
-                                rollout_old_log_probs = batch.batch["rollout_log_probs"]
-                                actor_old_log_probs = batch.batch["old_log_probs"]
-                                attention_mask = batch.batch["attention_mask"]
-                                responses = batch.batch["responses"]
-                                response_length = responses.size(1)
-                                response_mask = attention_mask[:, -response_length:]
-
-                                rollout_probs = torch.exp(rollout_old_log_probs)
-                                actor_probs = torch.exp(actor_old_log_probs)
-                                rollout_probs_diff = torch.abs(rollout_probs - actor_probs)
-                                rollout_probs_diff = torch.masked_select(rollout_probs_diff, response_mask.bool())
-                                rollout_probs_diff_max = torch.max(rollout_probs_diff)
-                                rollout_probs_diff_mean = torch.mean(rollout_probs_diff)
-                                rollout_probs_diff_std = torch.std(rollout_probs_diff)
-                                metrics.update(
-                                    {
-                                        "training/rollout_probs_diff_max": rollout_probs_diff_max.detach().item(),
-                                        "training/rollout_probs_diff_mean": rollout_probs_diff_mean.detach().item(),
-                                        "training/rollout_probs_diff_std": rollout_probs_diff_std.detach().item(),
-                                    }
-                                )
-
-                        if self.worker_group_managers[0].use_reference_policy:
-                            # compute reference log_prob
-                            with marked_timer("ref", timing_raw):
-                                ref_log_prob = self.worker_group_managers[0].ref_policy_wg.compute_ref_log_prob(batch)
-                                batch = batch.union(ref_log_prob)
-
-                        # compute rewards with KL penalty if needed
-
-                        # Note: This kl penalty applied directly over the rewards is disabled for GRPO. The kl penalty is applied at dp_actor.py
-                        # where it is subtracted directly from the policy loss
-
-                        # if not self.config.actor_rollout_ref.actor.use_kl_loss:
-                        #     batch, kl_metrics = apply_kl_penalty(batch,
-                        #                                        kl_ctrl=self.kl_ctrl,
-                        #                                        kl_penalty=self.config.algorithm.kl_penalty)
-                        #     metrics.update(kl_metrics)
-                        # else:
-                        #     batch.batch['token_level_rewards'] = batch.batch['token_level_scores']
-
-                        batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
-
-                        if self.config.rllm.stepwise_advantage.enable:
-                            if self.config.rllm.stepwise_advantage.mode == "per_step":
-                                batch.batch["token_level_rewards"] = batch.batch["mc_returns"]
-                                batch.non_tensor_batch["uid"] = batch.non_tensor_batch["step_ids"]
-
-                                is_pad_step = batch.non_tensor_batch["is_pad_step"]
-                                non_pad_step_indices = np.where(is_pad_step == False)[0]
-                                batch = batch.select_idxs(non_pad_step_indices)  # This batch only has non_pad steps
-                            elif self.config.rllm.stepwise_advantage.mode == "broadcast":
-                                # In case of step-wise advantage broadcast, we would split out the final steps, then merge again
-                                is_last_step = batch.non_tensor_batch["is_last_step"]
-                                last_step_indices = np.where(is_last_step == True)[0]
-                                other_step_indices = np.where(is_last_step == False)[0]
-                                other_step_batch = batch.select_idxs(other_step_indices)
-                                batch = batch.select_idxs(last_step_indices)  # This batch only has last steps
-                            else:
-                                raise ValueError(f"Stepwise advantage mode {self.config.rllm.stepwise_advantage.mode} not supported")
-
-                        # compute advantages, executed on the driver process
-                        batch = compute_advantage(
-                            batch,
-                            adv_estimator=self.config.algorithm.adv_estimator,
-                            gamma=self.config.algorithm.gamma,
-                            lam=self.config.algorithm.lam,
-                            num_repeat=self.config.actor_rollout_ref.rollout.n,
-                            norm_adv_by_std_in_grpo=self.config.algorithm.norm_adv_by_std_in_grpo,
-                            config=self.config.algorithm,
+                        local_batch = type(batch)(
+                            batch=batch.batch.clone(),
+                            non_tensor_batch=deepcopy(batch.non_tensor_batch),
+                            meta_info=deepcopy(batch.meta_info)
                         )
 
-                        if self.config.rllm.stepwise_advantage.enable and self.config.rllm.stepwise_advantage.mode == "broadcast":
-                            # remove the padded last steps
-                            # Merging the separated out steps using the advantage from last steps
-                            self._stepwise_advantage_broadcast(batch, other_step_batch=other_step_batch)
-                            # batch = batch.merge(other_step_batch)
-                            batch = DataProto.concat([batch, other_step_batch])
 
-                    if self.config.rllm.mask_truncated_samples:
-                        mask = batch.batch["attention_mask"][:, -1] == 1
-                        batch = batch[~mask]
+                        agent_batch = local_batch.union(final_gen_batch_output) #todo this may need a deep copy of batch
+                        agent_metrics = {f"agent_{agent_id}_{k}": v for k, v in generate_metrics.items()}
+                        metrics.update(agent_metrics)
 
-                    batch = self._pad_dataproto_to_world_size(batch=batch)
-                    # balance the number of valid tokens on each dp rank.
-                    # Note that this breaks the order of data inside the batch.
-                    # Please take care when you implement group based adv computation such as GRPO and rloo
-                    manager._balance_batch(batch, metrics=metrics)
+                        # compute values
+                        if agent_manager.use_critic:
+                            with marked_timer(f"values_agent_{agent_id}", timing_raw):
+                                values = agent_manager.critic_wg.compute_values(agent_batch)
+                                agent_batch = agent_batch.union(values)
 
-                    # compute global_valid tokens
-                    batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
+                        with marked_timer(f"adv_agent_{agent_id}", timing_raw):
+                            if agent_manager.use_rm:
+                                reward_tensor = agent_manager.rm_wg.compute_rm_score(agent_batch)
+                                agent_batch = agent_batch.union(reward_tensor)
 
-                    # update critic
-                    if self.worker_group_managers[0].use_critic:
-                        with marked_timer("update_critic", timing_raw):
-                            critic_output = self.worker_group_managers[0].critic_wg.update_critic(batch)
-                        critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
-                        metrics.update(critic_output_metrics)
+                            # reward tensor for env-based trajectory data can be obtained by processing the trajectories
+                            if "token_level_scores" not in agent_batch.batch:
+                                reward_tensor = self.reward_fn(agent_batch)
+                                agent_batch.batch["token_level_scores"] = reward_tensor
+                            else:
+                                reward_tensor = agent_batch.batch["token_level_scores"]  # filled in by environment collected trajectory transformation
 
-                    # implement critic warmup
-                    if self.config.trainer.critic_warmup <= manager.global_steps:
-                        # update actor
-                        with marked_timer("update_actor", timing_raw):
-                            actor_output = self.worker_group_managers[0].actor_rollout_wg.update_actor(batch)
-                        actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
-                        metrics.update(actor_output_metrics)
+                            # Rejection sampling based on rewards
+                            # Group rewards by uid
+                            uids = agent_batch.non_tensor_batch["uid"]
+                            unique_uids = np.unique(uids)
+                            valid_mask = torch.ones(len(uids), dtype=torch.bool)
+                            solve_none = 0
+                            solve_all = 0
+                            for uid in unique_uids:
+                                uid_mask = uids == uid
+                                uid_rewards = reward_tensor[uid_mask].sum(-1)  # Sum rewards for each sequence
+
+                                # Check if all rewards are <= 0 or all are 1 >= for this uid
+                                if (uid_rewards <= 0).all():
+                                    valid_mask[uid_mask] = False
+                                    solve_none += 1
+                                elif (uid_rewards >= 1).all():
+                                    valid_mask[uid_mask] = False
+                                    solve_all += 1
+
+                            # Log to metrics
+                            metrics[f"agent_{agent_id}_batch/solve_none"] = solve_none
+                            metrics[f"agent_{agent_id}_batch/solve_all"] = solve_all
+                            metrics[f"agent_{agent_id}_batch/solve_partial"] = len(unique_uids) - solve_none - solve_all
+
+                            if self.config.rllm.rejection_sample.enable:
+                                # log the actual complete training rewards before rejection sampling
+                                token_level_rewards = None  # for metrics calculation
+                                if self.config.rllm.stepwise_advantage.enable:
+                                    is_pad_step = agent_batch.non_tensor_batch["is_pad_step"]
+                                    non_pad_step_indices = np.where(is_pad_step == False)[0]
+                                    non_pad_steps = agent_batch.select_idxs(non_pad_step_indices)
+                                    is_last_step = non_pad_steps.non_tensor_batch["is_last_step"]
+                                    valid_last_step_indices = np.where(is_last_step == True)[0]
+                                    last_step_batch = agent_batch.select_idxs(valid_last_step_indices)
+                                    token_level_rewards = last_step_batch.batch["token_level_scores"]
+                                else:
+                                    token_level_rewards = agent_batch.batch["token_level_scores"]
+                                full_sequence_score = token_level_rewards.sum(-1)
+                                metrics[f"agent_{agent_id}_critic/full-score/mean"] = torch.mean(full_sequence_score).detach().item()
+                                metrics[f"agent_{agent_id}_critic/full-score/max"] = torch.max(full_sequence_score).detach().item()
+                                metrics[f"agent_{agent_id}_critic/full-score/min"] = torch.min(full_sequence_score).detach().item()
+
+                                # If no valid samples remain, skip this agent
+                                if not valid_mask.any():
+                                    continue
+
+                                # Filter batch to keep only valid samples
+                                agent_batch = agent_batch[valid_mask]
+
+                                if self.config.rllm.stepwise_advantage.enable and self.config.rllm.stepwise_advantage.mode == "broadcast":
+                                    # agent_batch now only contains steps with valid uids
+                                    # filter out padding steps
+                                    is_pad_step = agent_batch.non_tensor_batch["is_pad_step"]
+                                    non_pad_step_indices = np.where(is_pad_step == False)[0]
+                                    agent_batch = agent_batch.select_idxs(non_pad_step_indices)  # This batch only has non_pad steps
+
+                                    # need to make sure both number of last steps (number of uids) and number of total steps in the batch (batch size after processing) are all multiples of world size
+                                    # separate out last step and intermediate steps
+                                    is_last_step = agent_batch.non_tensor_batch["is_last_step"]
+                                    valid_last_step_indices = np.where(is_last_step == True)[0]
+                                    not_last_step_indices = np.where(is_last_step == False)[0]
+                                    last_step_batch = agent_batch.select_idxs(valid_last_step_indices)  # This batch only has valid last steps
+                                    non_last_step_batch = agent_batch.select_idxs(not_last_step_indices)
+
+                                    # filter last_step_batch to make sure its multiple of world size
+                                    num_trainer_replicas = agent_manager.actor_rollout_wg.world_size
+                                    max_batch_size = (
+                                        last_step_batch.batch["input_ids"].shape[0]  # 1 per trajectory
+                                        // num_trainer_replicas
+                                    ) * num_trainer_replicas
+                                    if not max_batch_size:
+                                        # give up, you got everything either all wrong or right.
+                                        continue
+
+                                    size_mask = torch.zeros(last_step_batch.batch["input_ids"].shape[0], dtype=torch.bool)
+                                    size_mask[:max_batch_size] = True
+                                    last_step_batch = last_step_batch[size_mask]  # filtered last steps
+
+                                    # now we go through all the non_last_step_batch and keep everything that has same idxs that exists in the filtered last steps
+                                    valid_last_step_idxs = last_step_batch.non_tensor_batch["idxs"]
+                                    non_last_step_idxs = non_last_step_batch.non_tensor_batch["idxs"]
+                                    non_last_step_mask = np.isin(non_last_step_idxs, valid_last_step_idxs)
+                                    non_last_step_batch = non_last_step_batch[non_last_step_mask]
+
+                                    # concatenate then pad
+                                    agent_batch = DataProto.concat([last_step_batch, non_last_step_batch])
+                                    agent_batch = self._pad_dataproto_to_world_size(agent_batch)
+                                else:
+                                    # Round down to the nearest multiple of world size
+                                    num_trainer_replicas = agent_manager.actor_rollout_wg.world_size
+                                    max_batch_size = (agent_batch.batch["input_ids"].shape[0] // num_trainer_replicas) * num_trainer_replicas
+                                    if not max_batch_size:
+                                        # give up, you got everything either all wrong or right.
+                                        continue
+
+                                    size_mask = torch.zeros(agent_batch.batch["input_ids"].shape[0], dtype=torch.bool)
+                                    size_mask[:max_batch_size] = True
+                                    agent_batch = agent_batch[size_mask]
+
+                            # recompute old_log_probs
+                            with marked_timer(f"old_log_prob_agent_{agent_id}", timing_raw):
+                                old_log_prob = agent_manager.actor_rollout_wg.compute_log_prob(agent_batch)
+                                agent_batch = agent_batch.union(old_log_prob)
+
+                            # recompute old_log_probs
+                            with marked_timer(f"old_log_prob_agent_{agent_id}_2", timing_raw, color="blue"):
+                                old_log_prob = agent_manager.actor_rollout_wg.compute_log_prob(agent_batch)
+                                entropys = old_log_prob.batch["entropys"]
+                                response_masks = agent_batch.batch["response_mask"]
+                                loss_agg_mode = self.config.actor_rollout_ref.actor.loss_agg_mode
+                                entropy_agg = agg_loss(loss_mat=entropys, loss_mask=response_masks, loss_agg_mode=loss_agg_mode)
+                                old_log_prob_metrics = {f"agent_{agent_id}_actor/entropy": entropy_agg.detach().item()}
+                                metrics.update(old_log_prob_metrics)
+                                old_log_prob.batch.pop("entropys")
+                                agent_batch = agent_batch.union(old_log_prob)
+
+                                if "rollout_log_probs" in agent_batch.batch.keys():
+                                    # TODO: we may want to add diff of probs too.
+                                    rollout_old_log_probs = agent_batch.batch["rollout_log_probs"]
+                                    actor_old_log_probs = agent_batch.batch["old_log_probs"]
+                                    attention_mask = agent_batch.batch["attention_mask"]
+                                    responses = agent_batch.batch["responses"]
+                                    response_length = responses.size(1)
+                                    response_mask = attention_mask[:, -response_length:]
+
+                                    rollout_probs = torch.exp(rollout_old_log_probs)
+                                    actor_probs = torch.exp(actor_old_log_probs)
+                                    rollout_probs_diff = torch.abs(rollout_probs - actor_probs)
+                                    rollout_probs_diff = torch.masked_select(rollout_probs_diff, response_mask.bool())
+                                    rollout_probs_diff_max = torch.max(rollout_probs_diff)
+                                    rollout_probs_diff_mean = torch.mean(rollout_probs_diff)
+                                    rollout_probs_diff_std = torch.std(rollout_probs_diff)
+                                    metrics.update(
+                                        {
+                                            f"agent_{agent_id}_training/rollout_probs_diff_max": rollout_probs_diff_max.detach().item(),
+                                            f"agent_{agent_id}_training/rollout_probs_diff_mean": rollout_probs_diff_mean.detach().item(),
+                                            f"agent_{agent_id}_training/rollout_probs_diff_std": rollout_probs_diff_std.detach().item(),
+                                        }
+                                    )
+
+                            if agent_manager.use_reference_policy:
+                                # compute reference log_prob
+                                with marked_timer(f"ref_agent_{agent_id}", timing_raw):
+                                    ref_log_prob = agent_manager.ref_policy_wg.compute_ref_log_prob(agent_batch)
+                                    agent_batch = agent_batch.union(ref_log_prob)
+
+                            # compute rewards with KL penalty if needed
+
+                            # Note: This kl penalty applied directly over the rewards is disabled for GRPO. The kl penalty is applied at dp_actor.py
+                            # where it is subtracted directly from the policy loss
+
+                            # if not self.config.actor_rollout_ref.actor.use_kl_loss:
+                            #     agent_batch, kl_metrics = apply_kl_penalty(agent_batch,
+                            #                                        kl_ctrl=self.kl_ctrl,
+                            #                                        kl_penalty=self.config.algorithm.kl_penalty)
+                            #     metrics.update(kl_metrics)
+                            # else:
+                            #     agent_batch.batch['token_level_rewards'] = agent_batch.batch['token_level_scores']
+
+                            agent_batch.batch["token_level_rewards"] = agent_batch.batch["token_level_scores"]
+
+                            if self.config.rllm.stepwise_advantage.enable:
+                                if self.config.rllm.stepwise_advantage.mode == "per_step":
+                                    agent_batch.batch["token_level_rewards"] = agent_batch.batch["mc_returns"]
+                                    agent_batch.non_tensor_batch["uid"] = agent_batch.non_tensor_batch["step_ids"]
+
+                                    is_pad_step = agent_batch.non_tensor_batch["is_pad_step"]
+                                    non_pad_step_indices = np.where(is_pad_step == False)[0]
+                                    agent_batch = agent_batch.select_idxs(non_pad_step_indices)  # This batch only has non_pad steps
+                                elif self.config.rllm.stepwise_advantage.mode == "broadcast":
+                                    # In case of step-wise advantage broadcast, we would split out the final steps, then merge again
+                                    is_last_step = agent_batch.non_tensor_batch["is_last_step"]
+                                    last_step_indices = np.where(is_last_step == True)[0]
+                                    other_step_indices = np.where(is_last_step == False)[0]
+                                    other_step_batch = agent_batch.select_idxs(other_step_indices)
+                                    agent_batch = agent_batch.select_idxs(last_step_indices)  # This batch only has last steps
+                                else:
+                                    raise ValueError(f"Stepwise advantage mode {self.config.rllm.stepwise_advantage.mode} not supported")
+
+                            # compute advantages, executed on the driver process
+                            agent_batch = compute_advantage(
+                                agent_batch,
+                                adv_estimator=self.config.algorithm.adv_estimator,
+                                gamma=self.config.algorithm.gamma,
+                                lam=self.config.algorithm.lam,
+                                num_repeat=self.config.actor_rollout_ref.rollout.n,
+                                norm_adv_by_std_in_grpo=self.config.algorithm.norm_adv_by_std_in_grpo,
+                                config=self.config.algorithm,
+                            )
+
+                            if self.config.rllm.stepwise_advantage.enable and self.config.rllm.stepwise_advantage.mode == "broadcast":
+                                # remove the padded last steps
+                                # Merging the separated out steps using the advantage from last steps
+                                self._stepwise_advantage_broadcast(agent_batch, other_step_batch=other_step_batch)
+                                # agent_batch = agent_batch.merge(other_step_batch)
+                                agent_batch = DataProto.concat([agent_batch, other_step_batch])
+
+                            if self.config.rllm.mask_truncated_samples:
+                                mask = agent_batch.batch["attention_mask"][:, -1] == 1
+                                agent_batch = agent_batch[~mask]
+
+                            agent_batch = self._pad_dataproto_to_world_size(agent_batch)
+                            # balance the number of valid tokens on each dp rank.
+                            # Note that this breaks the order of data inside the batch.
+                            # Please take care when you implement group based adv computation such as GRPO and rloo
+                            agent_manager._balance_batch(agent_batch, metrics=agent_metrics)
+
+                            # compute global_valid tokens
+                            agent_batch.meta_info["global_token_num"] = torch.sum(agent_batch.batch["attention_mask"], dim=-1).tolist()
+
+                            # update critic
+                            if agent_manager.use_critic:
+                                with marked_timer(f"update_critic_agent_{agent_id}", timing_raw):
+                                    critic_output = agent_manager.critic_wg.update_critic(agent_batch)
+                                critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
+                                agent_metrics = {f"agent_{agent_id}_{k}": v for k, v in critic_output_metrics.items()}
+                                metrics.update(agent_metrics)
+
+                            # implement critic warmup
+                            if self.config.trainer.critic_warmup <= self.global_steps:
+                                # update actor
+                                with marked_timer(f"update_actor_agent_{agent_id}", timing_raw):
+                                    actor_output = agent_manager.actor_rollout_wg.update_actor(agent_batch)
+                                actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
+                                agent_metrics = {f"agent_{agent_id}_{k}": v for k, v in actor_output_metrics.items()}
+                                metrics.update(agent_metrics)
+                        final_batch = agent_batch
 
                     # validate
-                    if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and manager.global_steps % self.config.trainer.test_freq == 0:
+                    if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and self.global_steps % self.config.trainer.test_freq == 0:
                         with marked_timer("testing", timing_raw):
                             val_metrics: dict = self._validate_agent()
                         metrics.update(val_metrics)
 
-                    if self.config.trainer.save_freq > 0 and manager.global_steps % self.config.trainer.save_freq == 0:
+                    if self.config.trainer.save_freq > 0 and self.global_steps % self.config.trainer.save_freq == 0:
                         with marked_timer("save_checkpoint", timing_raw):
                             manager._save_checkpoint()
 
-                # collect metrics
-                metrics.update(compute_data_metrics(batch=batch, use_critic=self.worker_group_managers[0].use_critic))
-                metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
+                # collect metrics (using first agent's batch for overall metrics)
+                # Note: In multi-agent setup, agent_batch is local to the agent loop
+                # For now, we skip batch-level metrics or compute them differently
+                metrics.update(compute_timing_metrics(batch=final_batch, timing_raw=timing_raw))
 
                 # TODO: make a canonical logger that supports various backend
-                logger.log(data=metrics, step=manager.global_steps)
+                logger.log(data=metrics, step=self.global_steps)
 
-                manager.global_steps += 1
+                self.global_steps += 1
 
-                if manager.global_steps >= manager.total_training_steps:
+                if self.global_steps >= manager.total_training_steps:
                     # perform validation after training
                     if self.val_reward_fn is not None:
                         val_metrics = self._validate_agent()
                         pprint(f"Final validation metrics: {val_metrics}")
-                        logger.log(data=val_metrics, step=manager.global_steps)
+                        logger.log(data=val_metrics, step=self.global_steps)
                     return
 
     def _validate_agent(self):
@@ -488,7 +522,9 @@ class AgentPPOTrainer:
                 last_step_indices = np.where(is_last_step == True)[0]
                 test_output_gen_batch = test_output_gen_batch.select_idxs(last_step_indices)  # This batch only has last steps
             else:
-                test_output_gen_batch, _ = self.generate_agent_trajectory(meta_info=test_batch.meta_info)
+                # Use agent 0's output for validation
+                agent_outputs = self.generate_agent_trajectory(meta_info=test_batch.meta_info)
+                test_output_gen_batch, _ = agent_outputs[0]
 
             test_batch = test_batch.union(test_output_gen_batch)
 
@@ -557,23 +593,38 @@ class AgentPPOTrainer:
             timing_raw = {}
         
         with marked_timer("collect_trajectory", timing_raw):
-            if not self.worker_group_managers[0].async_rollout_mode:
-                raise ValueError("Only async rollout mode is supported")
-            
-            # Collect trajectories (each trajectory internally queried all agents)
             trajectories = []
-            gen_seq_generator = self.generate_agent_trajectories_async(timing_raw=timing_raw, meta_info=meta_info, mode="Token")
-            for _, trajectory in enumerate(gen_seq_generator):
-                trajectories.append(trajectory)
-        
-        # Sort trajectories by their idx, to ensure they are in order
+            if True:
+                gen_seq_generator = self.generate_agent_trajectories_async(timing_raw=timing_raw, meta_info=meta_info, mode="Token")
+                for _, trajectory in enumerate(gen_seq_generator):
+                    trajectories.append(trajectory)
+            else:
+                raise ValueError("Only async rollout mode is supported")
+        # Sort trajectories by their idx, to ensure they are in order.
         trajectories.sort(key=lambda x: x["idx"])
         
         with marked_timer("transform_trajectory", timing_raw):
-            # Transform the raw trajectories into DataProto format
-            final_gen_batch_output, metrics = self._transform_agent_trajectories(trajectories)
+            # Extract agent-level trajectories and transform them
+            agent_level_batch_outputs = {}
+            agent_level_metrics = {}
+            
+            for agent_id in range(len(self.worker_group_managers)):
+                # Extract this agent's trajectories from all results
+                agent_trajectories = []
+                for result in trajectories:
+                    agent_level_result = result["agent_level_result"]
+                    if agent_id in agent_level_result:
+                        agent_traj = agent_level_result[agent_id]
+                        # Add idx back for compatibility with transform function
+                        agent_traj["idx"] = result["idx"]
+                        agent_trajectories.append(agent_traj)
+                
+                # Transform this agent's trajectories
+                agent_batch_output, agent_metrics = self._transform_agent_trajectories(agent_trajectories, agent_id)
+                agent_level_batch_outputs[agent_id] = (agent_batch_output, agent_metrics)
         
-        return final_gen_batch_output, metrics
+        # Return agent-level outputs as dictionary
+        return agent_level_batch_outputs
 
     def generate_agent_steps(self, timing_raw=None, meta_info=None, uids=None):
         """
@@ -588,19 +639,29 @@ class AgentPPOTrainer:
         if uids is None:
             uids = []
         with marked_timer("collect_trajectory", timing_raw):
-            steps = []
+            step_results = []
             gen_seq_generator = self.generate_agent_trajectories_async(timing_raw=timing_raw, meta_info=meta_info, mode="Step")
-            for _, trajectory in enumerate(gen_seq_generator):
-                steps.append(trajectory)
-        # Sort trajectories by their idx, to ensure they are in order.
-        steps.sort(key=lambda x: x["idx"])
+            for _, step_result in enumerate(gen_seq_generator):
+                step_results.append(step_result)
+        # Sort by idx to ensure they are in order
+        step_results.sort(key=lambda x: x["idx"])
 
         with marked_timer("transform_trajectory", timing_raw):
-            # Transform the raw trajectories into DataProto format.
-            final_gen_batch_output = self._transform_agent_steps(steps, uids=uids)
+            # Extract agent 0's steps for backward compatibility
+            agent_0_steps = []
+            for result in step_results:
+                agent_level_result = result["agent_level_result"]
+                if 0 in agent_level_result:
+                    agent_step = agent_level_result[0]
+                    # Add idx back for compatibility
+                    agent_step["idx"] = result["idx"]
+                    agent_0_steps.append(agent_step)
+            
+            # Transform the raw trajectories into DataProto format
+            final_gen_batch_output = self._transform_agent_steps(agent_0_steps, uids=uids)
         return final_gen_batch_output
 
-    def _transform_agent_trajectories(self, trajectories: list[dict]):
+    def _transform_agent_trajectories(self, trajectories: list[dict], agent_id = 0):
         """
         Helper function to transform a list of trajectories into tokenized DataProto format.
 
@@ -649,11 +710,10 @@ class AgentPPOTrainer:
             )
 
         # Save chat completions to a file
-        manager = self.worker_group_managers[0]
         save_dir = os.path.join(self.config.trainer.default_local_dir, "chat_completions")
         os.makedirs(save_dir, exist_ok=True)
         # Save it into a jsonl files (global_steps)
-        with open(os.path.join(save_dir, f"{manager.global_steps}.jsonl"), "w") as f:
+        with open(os.path.join(save_dir, f"{self.global_steps}_agent_{agent_id}.jsonl"), "w") as f:
             for chat_completion in chat_completions:
                 f.write(json.dumps(chat_completion) + "\n")
 

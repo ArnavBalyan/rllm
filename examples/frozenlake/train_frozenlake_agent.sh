@@ -5,6 +5,7 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:False"
 export VLLM_USE_V1=1
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export VLLM_ENGINE_ITERATION_TIMEOUT_S=100000000000
+export NCCL_DEBUG=INFO
 
 # Find the directory where rllm package is located
 RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dirname(rllm.__file__)))")
@@ -16,7 +17,7 @@ python3 -m examples.frozenlake.train_frozenlake_agent \
     data.val_files=${RLLM_DIR}/data/rllm-frozenlake/test.parquet \
     data.val_batch_size=128 \
     data.max_prompt_length=2048 \
-    data.max_response_length=2048 \
+    data.max_response_length=4096 \
     actor_rollout_ref.model.path=Qwen/Qwen3-4B \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \

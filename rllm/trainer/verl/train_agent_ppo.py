@@ -135,26 +135,40 @@ class TaskRunner:
             Role.Critic: ray.remote(CriticWorker),
         }
 
-        # Define the resource pool specification.
-        # Map roles to the resource pool.
-        global_pool_id = "global_pool"
-        resource_pool_spec = {
-            global_pool_id: [config.trainer.n_gpus_per_node] * config.trainer.nnodes,
+        # Define SEPARATE resource pool specifications for 2 agents
+        # Split the available GPUs between agents (4 GPUs each)
+        num_agents = 2
+        gpus_per_agent = config.trainer.n_gpus_per_node // num_agents  # 8 GPUs / 2 = 4 per agent
+        
+        # Agent 0: SEPARATE resource pool spec (only defines agent_0_pool)
+        agent_0_pool_id = "agent_0_pool"
+        resource_pool_spec_0 = {
+            agent_0_pool_id: [gpus_per_agent] * config.trainer.nnodes,
         }
-        mapping = {
-            Role.ActorRollout: global_pool_id,
-            Role.Critic: global_pool_id,
+        mapping_agent_0 = {
+            Role.ActorRollout: agent_0_pool_id,
+            Role.Critic: agent_0_pool_id,
+        }
+        
+        # Agent 1: SEPARATE resource pool spec (only defines agent_1_pool)
+        agent_1_pool_id = "agent_1_pool"
+        resource_pool_spec_1 = {
+            agent_1_pool_id: [gpus_per_agent] * config.trainer.nnodes,
+        }
+        mapping_agent_1 = {
+            Role.ActorRollout: agent_1_pool_id,
+            Role.Critic: agent_1_pool_id,
         }
 
         # Add a reference policy worker if KL loss or KL reward is used.
         if config.algorithm.use_kl_in_reward or config.actor_rollout_ref.actor.use_kl_loss:
             role_worker_mapping[Role.RefPolicy] = ray.remote(ActorRolloutRefWorker)
-            mapping[Role.RefPolicy] = global_pool_id
+            mapping_agent_0[Role.RefPolicy] = agent_0_pool_id
+            mapping_agent_1[Role.RefPolicy] = agent_1_pool_id
 
         # Load the reward manager for training and validation.
         reward_fn = load_reward_manager(config, tokenizer, num_examine=0, **config.reward_model.get("reward_kwargs", {}))
         val_reward_fn = load_reward_manager(config, tokenizer, num_examine=1, **config.reward_model.get("reward_kwargs", {}))
-        resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 
         if config.rllm.workflow.use_workflow:
             if workflow_class is None:
@@ -193,12 +207,25 @@ class TaskRunner:
             if config.rllm.agent.get("agent_args") is not None:
                 agent_args.update(config.rllm.agent.get("agent_args"))
 
-            # Create worker group manager
-            worker_group_manager = WorkerGroupManager(
+            # Create 2 worker group managers with SEPARATE resource pool specs
+            resource_pool_manager_agent_0 = ResourcePoolManager(resource_pool_spec=resource_pool_spec_0, mapping=mapping_agent_0)
+            resource_pool_manager_agent_1 = ResourcePoolManager(resource_pool_spec=resource_pool_spec_1, mapping=mapping_agent_1)
+            
+            worker_group_manager_0 = WorkerGroupManager(
                 config=config,
                 tokenizer=tokenizer,
                 role_worker_mapping=role_worker_mapping,
-                resource_pool_manager=resource_pool_manager,
+                resource_pool_manager=resource_pool_manager_agent_0,
+                ray_worker_group_cls=ray_worker_group_cls,
+                reward_fn=reward_fn,
+                val_reward_fn=val_reward_fn
+            )
+            
+            worker_group_manager_1 = WorkerGroupManager(
+                config=config,
+                tokenizer=tokenizer,
+                role_worker_mapping=role_worker_mapping,
+                resource_pool_manager=resource_pool_manager_agent_1,
                 ray_worker_group_cls=ray_worker_group_cls,
                 reward_fn=reward_fn,
                 val_reward_fn=val_reward_fn
@@ -207,7 +234,7 @@ class TaskRunner:
             trainer = AgentPPOTrainer(
                 config=config,
                 tokenizer=tokenizer,
-                worker_group_managers=[worker_group_manager],  # Pass as list
+                worker_group_managers=[worker_group_manager_0, worker_group_manager_1],  # Pass 2 managers
                 env_class=env_class,
                 agent_class=agent_class,
                 env_args=env_args,
