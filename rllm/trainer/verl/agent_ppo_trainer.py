@@ -206,16 +206,38 @@ class AgentPPOTrainer:
                     final_batch = None 
                     # Process each agent separately
                     for agent_id, agent_manager in enumerate(self.worker_group_managers):
+                        # Skip if agent has no training data (all samples truncated/invalidated)
+                        if agent_id not in agent_outputs:
+                            print(f"⚠️  Agent {agent_id} has no training data for this batch (all samples truncated), skipping...")
+                            metrics[f"agent_{agent_id}_batch/skipped_all_truncated"] = 1
+                            continue
+                        
                         # Extract this agent's trajectory output and union with prompts
                         final_gen_batch_output, generate_metrics = agent_outputs[agent_id]
 
-
-                        local_batch = type(batch)(
-                            batch=batch.batch.clone(),
-                            non_tensor_batch=deepcopy(batch.non_tensor_batch),
-                            meta_info=deepcopy(batch.meta_info)
-                        )
-
+                        # Filter local_batch to only include indices that are present in final_gen_batch_output
+                        # This handles the case where some trajectories were truncated/invalidated
+                        if "idxs" in final_gen_batch_output.non_tensor_batch:
+                            valid_idxs = final_gen_batch_output.non_tensor_batch["idxs"]
+                            local_batch = type(batch)(
+                                batch=batch.batch.clone(),
+                                non_tensor_batch=deepcopy(batch.non_tensor_batch),
+                                meta_info=deepcopy(batch.meta_info)
+                            )
+                            # Select only the rows corresponding to valid trajectories (with idx alignment)
+                            local_batch = local_batch.select_idxs(valid_idxs)
+                            
+                            # Track truncation for metrics
+                            num_truncated = len(batch) - len(valid_idxs)
+                            if num_truncated > 0:
+                                metrics[f"agent_{agent_id}_batch/num_truncated"] = num_truncated
+                        else:
+                            # Fallback for stepwise mode or other cases where idxs not provided
+                            local_batch = type(batch)(
+                                batch=batch.batch.clone(),
+                                non_tensor_batch=deepcopy(batch.non_tensor_batch),
+                                meta_info=deepcopy(batch.meta_info)
+                            )
 
                         agent_batch = local_batch.union(final_gen_batch_output) #todo this may need a deep copy of batch
                         agent_metrics = {f"agent_{agent_id}_{k}": v for k, v in generate_metrics.items()}
@@ -500,6 +522,7 @@ class AgentPPOTrainer:
         rewards_lst = []
         data_source_lst = []
         uid_lst = []
+        val_metrics = {}  # Track validation filtering metrics
         for test_data in manager.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
             test_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(test_batch.batch))], dtype=object)
@@ -517,22 +540,33 @@ class AgentPPOTrainer:
 
             if self.config.rllm.stepwise_advantage.enable:
                 test_output_gen_batch = self.generate_agent_steps(meta_info=test_batch.meta_info, uids=test_batch.non_tensor_batch["uid"])
-                # for validation, we only need the last step
                 is_last_step = test_output_gen_batch.non_tensor_batch["is_last_step"]
                 last_step_indices = np.where(is_last_step == True)[0]
-                test_output_gen_batch = test_output_gen_batch.select_idxs(last_step_indices)  # This batch only has last steps
+                test_output_gen_batch = test_output_gen_batch.select_idxs(last_step_indices)
+                test_batch_union = test_batch.union(test_output_gen_batch)
+                reward_tensor = test_batch_union.batch["token_level_scores"]
+                rewards_lst.append(reward_tensor.sum(-1).cpu())
+                data_source_lst.append(test_batch_union.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
+                uid_lst.append(test_batch_union.non_tensor_batch["uid"])
             else:
-                # Use agent 0's output for validation
                 agent_outputs = self.generate_agent_trajectory(meta_info=test_batch.meta_info)
-                test_output_gen_batch, _ = agent_outputs[0]
-
-            test_batch = test_batch.union(test_output_gen_batch)
-
-            reward_tensor = test_batch.batch["token_level_scores"]
-
-            rewards_lst.append(reward_tensor.sum(-1).cpu())
-            data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
-            uid_lst.append(test_batch.non_tensor_batch["uid"])
+                for agent_id, (test_output_gen_batch, _) in agent_outputs.items():
+                    if "idxs" in test_output_gen_batch.non_tensor_batch:
+                        valid_idxs = test_output_gen_batch.non_tensor_batch["idxs"]
+                        local_test_batch = test_batch.select_idxs(valid_idxs)
+                        # Track truncated samples
+                        num_truncated = len(test_batch) - len(valid_idxs)
+                        val_metrics[f"val/agent_{agent_id}_num_truncated"] = val_metrics.get(f"val/agent_{agent_id}_num_truncated", 0) + num_truncated
+                    else:
+                        local_test_batch = test_batch
+                    test_batch_union = local_test_batch.union(test_output_gen_batch)
+                    reward_tensor = test_batch_union.batch["token_level_scores"]
+                    rewards_lst.append(reward_tensor.sum(-1).cpu())
+                    # Tag data source with agent_id to separate metrics per agent
+                    base_sources = test_batch_union.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0])
+                    agent_sources = [f"agent_{agent_id}_{src}" for src in base_sources]
+                    data_source_lst.append(agent_sources)
+                    uid_lst.append(test_batch_union.non_tensor_batch["uid"])
 
         reward_tensor = torch.cat(rewards_lst, dim=0)  # (batch_size,)
         data_sources = np.concatenate(data_source_lst, axis=0)
@@ -541,7 +575,8 @@ class AgentPPOTrainer:
 
         # to group for pass@k
         uid_tensor = np.concatenate(uid_lst, axis=0)
-        data_source_uid_pass_rates = {}  # data source to {uid: pass or not}
+        data_source_uid_pass_rates = {}  # data source to {uid: max score}
+        data_source_uid_all_rewards = {}  # data source to {uid: [all rewards]} for solve categorization
 
         for i in range(reward_tensor.shape[0]):
             data_source = data_sources[i]
@@ -553,12 +588,15 @@ class AgentPPOTrainer:
             # pass@k
             if data_source not in data_source_uid_pass_rates:
                 data_source_uid_pass_rates[data_source] = {}
+                data_source_uid_all_rewards[data_source] = {}
 
             uid = uid_tensor[i]
             if uid not in data_source_uid_pass_rates[data_source]:
                 data_source_uid_pass_rates[data_source][uid] = 0  # default to not pass
+                data_source_uid_all_rewards[data_source][uid] = []
             # take highest score
             data_source_uid_pass_rates[data_source][uid] = max(data_source_uid_pass_rates[data_source][uid], reward_tensor[i].item())
+            data_source_uid_all_rewards[data_source][uid].append(reward_tensor[i].item())
 
         metric_dict = {}
         for data_source, rewards in data_source_reward.items():
@@ -569,10 +607,27 @@ class AgentPPOTrainer:
 
         for data_source, pass_rates in data_source_uid_pass_rates.items():
             pass_k_lst = []
+            solve_none = 0
+            solve_all = 0
+            solve_partial = 0
             for uid, pass_score in pass_rates.items():
                 pass_k_lst.append(pass_score >= 1)  # assuming 1 means passed
+                # Categorize based on ALL attempts for this uid
+                uid_rewards = data_source_uid_all_rewards[data_source][uid]
+                if all(r <= 0 for r in uid_rewards):
+                    solve_none += 1
+                elif all(r >= 1 for r in uid_rewards):
+                    solve_all += 1
+                else:
+                    solve_partial += 1
             metric_dict[f"val/test_score/pass@k/{data_source}"] = np.mean(pass_k_lst)
+            # Add solve category metrics
+            metric_dict[f"val/{data_source}/solve_none"] = solve_none
+            metric_dict[f"val/{data_source}/solve_all"] = solve_all
+            metric_dict[f"val/{data_source}/solve_partial"] = solve_partial
 
+        # Merge validation filtering metrics
+        metric_dict.update(val_metrics)
         return metric_dict
 
     def generate_agent_trajectory(self, timing_raw=None, meta_info=None):
@@ -619,8 +674,13 @@ class AgentPPOTrainer:
                         agent_traj["idx"] = result["idx"]
                         agent_trajectories.append(agent_traj)
                 
+                # Skip if no valid trajectories (all samples truncated/invalidated for this agent)
+                if len(agent_trajectories) == 0:
+                    print(f"⚠️  Agent {agent_id} has no valid trajectories (all samples truncated), skipping agent for this batch...")
+                    continue
+                
                 # Transform this agent's trajectories
-                agent_batch_output, agent_metrics = self._transform_agent_trajectories(agent_trajectories, agent_id)
+                agent_batch_output, agent_metrics = self._transform_agent_trajectories(agent_trajectories)
                 agent_level_batch_outputs[agent_id] = (agent_batch_output, agent_metrics)
         
         # Return agent-level outputs as dictionary
@@ -661,7 +721,7 @@ class AgentPPOTrainer:
             final_gen_batch_output = self._transform_agent_steps(agent_0_steps, uids=uids)
         return final_gen_batch_output
 
-    def _transform_agent_trajectories(self, trajectories: list[dict], agent_id = 0):
+    def _transform_agent_trajectories(self, trajectories: list[dict]):
         """
         Helper function to transform a list of trajectories into tokenized DataProto format.
 
@@ -679,6 +739,7 @@ class AgentPPOTrainer:
         traj_scores = []
         chat_completions = []
         traj_metrics = []
+        traj_idxs = []  # Preserve idx for matching with original batch
         metrics = {}
 
         for traj in trajectories:
@@ -692,6 +753,7 @@ class AgentPPOTrainer:
             traj_scores.append(traj["trajectory_reward"])
             chat_completions.append(traj["chat_completions"])
             traj_metrics.append(traj["metrics"])
+            traj_idxs.append(traj["idx"])  # Extract and preserve idx
 
         # Flatten traj_metrics into a dict of lists
         traj_metrics = {k: [d[k] for d in traj_metrics] for k in traj_metrics[0]}
@@ -713,7 +775,7 @@ class AgentPPOTrainer:
         save_dir = os.path.join(self.config.trainer.default_local_dir, "chat_completions")
         os.makedirs(save_dir, exist_ok=True)
         # Save it into a jsonl files (global_steps)
-        with open(os.path.join(save_dir, f"{self.global_steps}_agent_{agent_id}.jsonl"), "w") as f:
+        with open(os.path.join(save_dir, f"{self.global_steps}.jsonl"), "w") as f:
             for chat_completion in chat_completions:
                 f.write(json.dumps(chat_completion) + "\n")
 
@@ -776,10 +838,14 @@ class AgentPPOTrainer:
             "token_level_scores": score_batch,
             "response_mask": traj_mask,
         }
+        
+        non_tensor_batch = {
+            "idxs": np.array(traj_idxs, dtype=np.int64),  # Preserve idx for alignment with original batch
+        }
 
         self.visualize_trajectory(DataProto.from_dict(tensors=tensor_batch))
 
-        return DataProto.from_dict(tensors=tensor_batch), metrics
+        return DataProto.from_dict(tensors=tensor_batch, non_tensors=non_tensor_batch), metrics
 
     def visualize_trajectory(self, tensor_batch, sample_idx=0, max_samples=1, mask_key="response_mask"):
         """

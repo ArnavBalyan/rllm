@@ -62,12 +62,14 @@ class AgentExecutionEngine:
         self.engine_name = engine_name
         self.n_parallel_agents = n_parallel_agents
         self.overlong_filter = overlong_filter
+        self.rollout_engines = rollout_engines
+        self.n_rollout_engines = len(self.rollout_engines)
 
         # For interaction
         self.gamma = gamma
         self.retry_limit = retry_limit
         self.max_steps = max_steps
-        self.max_response_length = max_response_length
+        self.max_response_length = [2048, 3072]
         self.max_prompt_length = max_prompt_length
         self.enforce_max_prompt_length = enforce_max_prompt_length
 
@@ -76,11 +78,7 @@ class AgentExecutionEngine:
         self.env_class = env_class
         self.env_args = env_args
 
-        if rollout_engines is None or len(rollout_engines) == 0:
-            raise ValueError("rollout_engines must be a non-empty list")
-        self.num_agents = len(rollout_engines)
-        # agents[env_idx][agent_id] = agent for environment env_idx and rollout engine agent_id
-        self.agents = [[None for _ in range(self.num_agents)] for _ in range(n_parallel_agents)]
+        self.agents = [[None for _ in range(self.n_rollout_engines)] for _ in range(n_parallel_agents)]
         self.envs = [None for _ in range(n_parallel_agents)]
 
         self.trajectory_timeout = trajectory_timeout
@@ -108,10 +106,10 @@ class AgentExecutionEngine:
                     api_retries=api_retries,
                     tokenizer=self.tokenizer,
                     max_prompt_length=self.max_prompt_length,
-                    max_response_length=self.max_response_length,
+                    max_response_length=self.max_response_length[i],
                     disable_thinking=kwargs.get("disable_thinking", False),
                 )
-                for _ in rollout_engines
+                for i, _ in enumerate(rollout_engines)
             ]
         elif self.engine_name == "verl":
             from rllm.engine.rollout.verl_engine import VerlEngine
@@ -125,6 +123,8 @@ class AgentExecutionEngine:
                 )
                 for manager in rollout_engines
             ]
+        
+        self.n_rollout_engines = len(self.rollout_engines)
 
         # Create a thread pool executor for environment interactions (i.e. step, reset, close)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
@@ -152,9 +152,9 @@ class AgentExecutionEngine:
         sampling_params = self.sampling_params.copy()
         sampling_params.update(kwargs)
         
-        # Get the specific rollout engine for this agent
+        # Select the correct rollout engine
         rollout_engine = self.rollout_engines[agent_id]
-        
+
         if self.engine_name == "openai":
             output = await rollout_engine.get_model_response(prompt, application_id=application_id, enforce_max_prompt_length=False, **sampling_params)
             return output.text
@@ -174,10 +174,7 @@ class AgentExecutionEngine:
             envs: List of environments to use
             agents: 2D list of agents - agents[env_idx][agent_id] = agent for environment env_idx and rollout engine agent_id
         """
-        # agents is now 2D: agents[env_idx][agent_id]
-        assert len(agents) == len(envs), f"Number of agent rows must equal to number of environments but received {len(agents)} and {len(envs)}"
-        assert all(len(agents[i]) == self.num_agents for i in range(len(agents))), f"Each environment must have {self.num_agents} agents"
-        
+        assert len(agents) == len(envs), f"Number of agents must equal to number of environments but received, {len(agents)} and {len(envs)}"
         self.envs = envs
         # For keeping track of the environment index in the batch.
         for idx, env in enumerate(envs):
@@ -186,226 +183,312 @@ class AgentExecutionEngine:
         self.n_parallel_agents = len(envs)
 
     async def run_agent_trajectory_async(self, idx, application_id, seed=0, mode="Text", **kwargs):
-        """Run trajectories for all agents asynchronously and return structured result
-        
-        Returns:
-            dict: {
-                "idx": env.idx,
-                "agent_level_result": {
-                    agent_id: {
-                        "prompt_tokens": torch.tensor,
-                        "response_tokens": torch.tensor,
-                        "response_masks": torch.tensor,
-                        "trajectory_reward": float,
-                        "chat_completions": list,
-                        "metrics": dict
-                    }
-                }
-            }
-        """
-        
-        # Per-env state
-        agent_level_result = {}
-        proposer_responses_by_step: list[str] = []
-        shared_response_token_len = 0
+        """Run a single agent's trajectory asynchronously"""
         env = self.envs[idx]
-        agents_row = self.agents[idx]
-
-        # for step return (log follower steps if needed)
-        episode_steps = []
-        # Reset environment ONCE
         loop = asyncio.get_event_loop()
+        
         observation, info = await loop.run_in_executor(self.executor, env.reset)
         info["max_steps"] = self.max_steps
-        # Init ALL agents with same observation and compute their initial prompt tokens
-        prompt_tokens_per_agent = {aid: [] for aid in range(self.num_agents)}
-        response_tokens_per_agent = {aid: [] for aid in range(self.num_agents)}
-        response_masks_per_agent  = {aid: [] for aid in range(self.num_agents)}
-        response_token_len_per_agent = {aid: 0 for aid in range(self.num_agents)}
+        
+        termination_reason = {}
+        prompt_token_len = {}
+        prompt_tokens = {}
+        response_token_len = {}
+        response_tokens = {}
+        response_masks = {}
+        reward_time = {}
+        llm_time = {}
+        env_time = {}
+        reward = {}
+        episode_steps = {}
         total_time = 0.0
-        reward_time = None
-        llm_time = 0.0
-        env_time = 0.0
-        termination_reason = None
-        reward = 0.0
-        for aid in range(self.num_agents):
-            ag = agents_row[aid]
-            ag.reset()
-            ag.update_from_env(observation=observation, reward=0.0, done=False, info=dict(info))
-            msgs = ag.chat_completions
-            ptoks, _ = convert_messages_to_tokens_and_masks(msgs, tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=True, contains_generation_msg=True)
-            prompt_tokens_per_agent[aid] = ptoks
-            if len(ptoks) > self.max_prompt_length:
-                raise Exception(f"Trajectory {idx}: initial prompt length {len(ptoks)} exceeded max_prompt_length {self.max_prompt_length}, retrying")
+        
+        for engine_id in range(self.n_rollout_engines):
+            agent = self.agents[idx][engine_id]
+            agent.reset()
+            agent.update_from_env(observation=observation, reward=0.0, done=False, info=info)
+            
+            messages = agent.chat_completions
+            tokens, _ = convert_messages_to_tokens_and_masks(messages, tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=True, contains_generation_msg=True)
+            
+            termination_reason[engine_id] = None
+            prompt_token_len[engine_id] = len(tokens)
+            prompt_tokens[engine_id] = tokens
+            response_token_len[engine_id] = 0
+            response_tokens[engine_id] = []
+            response_masks[engine_id] = []
+            reward_time[engine_id] = None
+            llm_time[engine_id] = 0.0
+            env_time[engine_id] = 0.0
+            reward[engine_id] = 0.0
+            episode_steps[engine_id] = []
+            
+            if prompt_token_len[engine_id] > self.max_prompt_length:
+                raise Exception(f"Trajectory {idx} Engine {engine_id}: initial prompt length {prompt_token_len[engine_id]} already exceeded max_prompt_length {self.max_prompt_length}")
 
         for step_idx in range(self.max_steps):
-            # Get action from agent
-            # Max remaining tokens left for the response
-            # For enforced max prompt at each step, no need to deduct here
-            if not self.enforce_max_prompt_length:
-                max_tokens = self.max_response_length - shared_response_token_len
-            else:
-                max_tokens = self.max_response_length
+            actions = {}
+            upstream_response = None
+            
+            # Run each engine in sequence
+            for engine_id in range(self.n_rollout_engines):
+                # Skip engines that have already terminated in a previous step
+                if termination_reason.get(engine_id) is not None:
+                    continue
 
-            # 1) Agent 0 (proposer) generates
-            a0 = agents_row[0]
-            prompt0 = a0.chat_completions.copy()
-            kwargs["max_tokens"] = max_tokens
+                # If this engine has already exhausted its token budget in a previous step,
+                # mark truncation and skip calling the model (mirrors single-engine step boundary)
+                if (not self.enforce_max_prompt_length) and response_token_len[engine_id] >= self.max_response_length[engine_id]:
+                    termination_reason[engine_id] = "TRUNCATION"
+                    continue
 
-            start_time = time.time()
-            response = await self.get_model_response(prompt_messages, application_id, **kwargs)
-            delta_time = time.time() - start_time
-            llm_time += delta_time
-            total_time += delta_time
-            # Update steps
-            prompt_response_pair = {
-                "prompt": self.chat_parser.parse(prompt_messages, add_generation_prompt=True, is_first_msg=True),
-                "response": response,
-            }
-            episode_steps.append(prompt_response_pair)
+                agent = self.agents[idx][engine_id]
+                
+                # Inject upstream recommendation BEFORE calling model for downstream engines
+                if engine_id > 0 and upstream_response is not None:
+                    agent.chat_completions.append({
+                        "role": "user",
+                        "content": f"Recommendation from the proposer: {upstream_response}",
+                        "_is_upstream_recommendation": True  # Signal for tokenization
+                    })
+                
+                # Remove signal field before sending to model
+                prompt_messages = [
+                    {k: v for k, v in msg.items() if k != '_is_upstream_recommendation'}
+                    for msg in agent.chat_completions
+                ]
+                # print(f"\n[Engine {engine_id}] [Step {step_idx}] Prompt Messages ({prompt_messages} ")
+                
+                if not self.enforce_max_prompt_length:
+                    max_tokens = self.max_response_length[engine_id] - response_token_len[engine_id]
+                    print(
+                        f"[DEBUG] Step {step_idx} Engine {engine_id} computing max_tokens: "
+                        f"{self.max_response_length[engine_id]} - {response_token_len[engine_id]} = {max_tokens}"
+                    )
+                else:
+                    max_tokens = self.max_response_length[engine_id]
+                    # since max prompt is enforced, we filter out too long prompts.
+                    prompt_str = self.chat_parser.parse(prompt_messages, add_generation_prompt=True, is_first_msg=True)
+                    prompt_len = len(self.tokenizer.encode(prompt_str, add_special_tokens=False))
+                    if prompt_len > self.max_prompt_length:
+                        termination_reason[engine_id] = "PROMPT_TRUNCATION"
+                        should_break = True
+                        break
 
-            # Update agent with model response
-            action: Action = agent.update_from_model(response)
-            action = action.action
+                print(f"[DEBUG] Step {step_idx} Engine {engine_id} calling model with max_tokens={max_tokens}")
+                kwargs["max_tokens"] = max_tokens
 
+                start_time = time.time()
+                response = await self.get_model_response(prompt_messages, application_id, agent_id=engine_id, **kwargs)
+                delta_time = time.time() - start_time
+                llm_time[engine_id] += delta_time
+                total_time += delta_time
+                
+                prompt_response_pair = {
+                    "prompt": self.chat_parser.parse(prompt_messages, add_generation_prompt=True, is_first_msg=True),
+                    "response": response,
+                }
+                episode_steps[engine_id].append(prompt_response_pair)
+
+                action_obj: Action = agent.update_from_model(response)
+                actions[engine_id] = action_obj.action
+                
+                if engine_id == 0:
+                    upstream_response = response
+
+            # Use last engine's action for environment step
+            action = actions[self.n_rollout_engines - 1]
+            
             # Take step in environment using the executor
             start_time = time.time()
 
             try:
-                next_observation, reward, done, info = await asyncio.wait_for(loop.run_in_executor(self.executor, env.step, action), timeout=(self.trajectory_timeout - total_time))
+                next_observation, env_reward, global_done, info = await asyncio.wait_for(loop.run_in_executor(self.executor, env.step, action), timeout=(self.trajectory_timeout - total_time))
             except asyncio.TimeoutError:
                 termination_reason = "ENV_TIMEOUT"
                 if step_idx == 0:
                     colorful_print(f"Warning: Trajectory {idx} completed due to: {termination_reason} before able to perform 1 complete action. This might cause unexpected behavior. Consider increasing trajectory timeout limit.\n", "red")
-                reward = 0
-                done = True
+                env_reward = 0
+                global_done = True
                 break
 
             info["max_steps"] = self.max_steps
-            # 4) Update ALL agents with the same transition
-            for aid in range(self.num_agents):
-                agents_row[aid].update_from_env(
+            should_break = False
+            # Update each agent with environment result
+            for engine_id in range(self.n_rollout_engines):
+                agent = self.agents[idx][engine_id]
+                info["cur_tokens"] = response_token_len[engine_id]
+                
+                reward[engine_id] = env_reward
+
+                # Update agent internal state.
+                agent.update_from_env(
                     observation=next_observation,
-                    reward=reward,
-                    done=done,
-                    info=dict(info),
+                    reward=env_reward,
+                    done=global_done,
+                    info=info,
                 )
 
-            # 5) Commit ENV messages for both agents; filter synthetic hint
-            for aid in range(self.num_agents):
-                chat_msgs = agents_row[aid].chat_completions
-                _, env_messages = get_recent_assistant_user_messages(chat_msgs)
-                if env_messages:
-                    env_messages = [
-                        m for m in env_messages
-                        if not m.get("_synthetic") and not m.get("content", "").startswith("Recommendation from proposer:")
-                    ]
+                cur_step = agent.get_current_state()
+                cur_step.reward = env_reward
+                cur_step.done = global_done
+                cur_step.info.update(info)
+     
+                chat_completions_messages = agent.chat_completions
+                assistant_message, env_messages = get_recent_assistant_user_messages(chat_completions_messages)
+     
+                # print(f"\n[Engine {engine_id}] [Step {step_idx}] Recent Messages ({assistant_message}")
+                # print(f"\n[Engine {engine_id}] [Step {step_idx}] Environment Messages ({env_messages})")
+
+                # Check and convert to tokens if necessary
+                assert assistant_message is not None or mode != "Token", "Assistant messages is none when accumulating token trajectories which should be conversations. This should not happen."
+                assert env_messages is not None or mode != "Token", "Environment messages is none when accumulating token trajectories which should be conversations. This should not happen."
+                assistant_msg_tokens, assistant_msg_masks = [], []
                 env_msg_tokens, env_msg_masks = [], []
+                if assistant_message:
+                    assistant_msg_tokens, assistant_msg_masks = convert_messages_to_tokens_and_masks([assistant_message], tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=False, contains_generation_msg=False)
                 if env_messages:
                     env_msg_tokens, env_msg_masks = convert_messages_to_tokens_and_masks(env_messages, tokenizer=self.tokenizer, parser=self.chat_parser, contains_first_msg=False, contains_generation_msg=True)
-                add_env = len(env_msg_tokens)
-                response_tokens_per_agent[aid].extend(env_msg_tokens)
-                response_masks_per_agent[aid].extend(env_msg_masks)
-                response_token_len_per_agent[aid] += add_env
-                shared_response_token_len += add_env
+
+                # Update repsonse token length
+                response_token_len[engine_id] += len(assistant_msg_tokens) + len(env_msg_tokens)
+                # Reached maximum number of tokens for the trajectory
+                if not self.enforce_max_prompt_length and response_token_len[engine_id] >= self.max_response_length[engine_id]:
+                    # Truncation length
+                    truncation_length = self.max_response_length[engine_id] - response_token_len[engine_id]
+                    # Truncate the response and masks
+                    if truncation_length < 0:
+                        truncated_response_tokens = (assistant_msg_tokens + env_msg_tokens)[:truncation_length]
+                        truncated_response_masks = (assistant_msg_masks + env_msg_masks)[:truncation_length]
+                    else:
+                        # Edge case where the response is exactly the max response length.
+                        truncated_response_tokens = assistant_msg_tokens + env_msg_tokens
+                        truncated_response_masks = assistant_msg_masks + env_msg_masks
+                    # Update token collections
+                    response_tokens[engine_id].extend(truncated_response_tokens)
+                    response_masks[engine_id].extend(truncated_response_masks)
+
+                    cur_step = agent.get_current_state()
+                    if response_token_len[engine_id] - len(env_msg_tokens) > self.max_response_length[engine_id]:
+                        cur_step.reward = 0.0
+                    cur_step.done = True
+                    termination_reason[engine_id] = "TRUNCATION"
+                    should_break = True
+                    # handle returning
+                    break
+
+                # Update the token version of trajectory
+                response_tokens[engine_id].extend(assistant_msg_tokens)
+                response_masks[engine_id].extend(assistant_msg_masks)
+                observation = next_observation
+
+                # Check if episode is done
+                if global_done:
+                    termination_reason[engine_id] = "ENV_DONE"
+                    should_break = True
+                    continue
+                
+                response_tokens[engine_id].extend(env_msg_tokens)
+                response_masks[engine_id].extend(env_msg_masks)
+                
+                if step_idx == self.max_steps - 1:
+                    termination_reason[engine_id] = "MAX_STEPS"
             
-            # Check truncation AFTER all agents' env messages collected
-            if not self.enforce_max_prompt_length and shared_response_token_len >= self.max_response_length:
-                for aid in range(self.num_agents):
-                    cs = agents_row[aid].get_current_state()
-                    if cs:
-                        cs.reward = 0.0
-                        cs.done = True
-                termination_reason = "TRUNCATION"
+            # Break outer loop if environment is done
+            if should_break:
                 break
+
+        # Process each engine's results
+        for engine_id in range(self.n_rollout_engines):
+            agent = self.agents[idx][engine_id]
             
-            observation = next_observation
+            masked_out = False
+            if self.overlong_filter:
+                if termination_reason[engine_id] in ["TRUNCATION", "MAX_STEPS", "TIMEOUT"]:
+                    # Mask out the entire response for overlong trajectories if the reward is 0.
+                    response_masks[engine_id] = [0] * len(response_masks[engine_id])
+                    masked_out = True
 
-            if total_time >= self.trajectory_timeout:
-                termination_reason = "TIMEOUT"
-                for aid in range(self.num_agents):
-                    cs = agents_row[aid].get_current_state()
-                    if cs:
-                        cs.done = True
-                break
+            if hasattr(env, "compute_final_reward") and not masked_out:
+                start_time = time.time()
+                _final_reward = await loop.run_in_executor(self.executor, env.compute_final_reward)
+                reward_time[engine_id] = time.time() - start_time
+                cur_step = agent.get_current_state()
+                cur_step.reward = _final_reward
+                reward[engine_id] = _final_reward
+                
+            if termination_reason[engine_id]:
+                if reward[engine_id] > 0:
+                    color = "green"
+                else:
+                    color = "yellow"
+                colorful_print(
+                    f"Trajectory {idx} Engine {engine_id} completed due to: {termination_reason[engine_id]}. Reward is {reward[engine_id]}. \n",
+                    color,
+                )
+                if masked_out:
+                    colorful_print(f"Trajectory {idx} Engine {engine_id} is masked out due to overlong filter.", "red")
 
-            # Check if episode is done
-            if done:
-                termination_reason = "ENV_DONE"
-                break
-            if step_idx == self.max_steps - 1:
-                termination_reason = "MAX_STEPS"
-
-        masked_out = False
-        if self.overlong_filter:
-            if termination_reason == "TRUNCATION" or termination_reason == "MAX_STEPS" or termination_reason == "TIMEOUT":
-                # Mask out the entire response for overlong trajectories if the reward is 0.
-                for aid in range(self.num_agents):
-                    response_masks_per_agent[aid] = [0] * len(response_masks_per_agent[aid])
-                masked_out = True
-
-        if hasattr(env, "compute_final_reward") and not masked_out:
-            start_time = time.time()
-            reward = await loop.run_in_executor(self.executor, env.compute_final_reward)
-            reward_time = time.time() - start_time
-            for aid in range(self.num_agents):
-                cs = agents_row[aid].get_current_state()
-                if cs:
-                    cs.reward = reward
-
-        # Closing environment using the executor.
-        await loop.run_in_executor(self.executor, env.close)
-        if termination_reason:
-            if reward > 0:
-                color = "green"
-            else:
-                color = "yellow"
-            colorful_print(
-                f"Trajectory {idx} completed due to: {termination_reason}. Reward is {reward}. \n",
-                color,
-            )
-            if masked_out:
-                colorful_print(f"Trajectory {idx} is masked out due to overlong filter.", "red")
-
-        # Aggregate per-agent outputs
-        for aid in range(self.num_agents):
-            agent = agents_row[aid]
-            trajectory: Trajectory = agent.trajectory
+            trajectory = agent.trajectory
             compute_trajectory_reward(trajectory)
             compute_mc_return(trajectory, gamma=self.gamma)
-            if mode == "Text":
-                agent_level_result[aid] = trajectory
-            elif mode == "Token":
-                token_result = {
-                    "prompt_tokens": torch.tensor(prompt_tokens_per_agent[aid], dtype=torch.long),
-                    "response_tokens": torch.tensor(response_tokens_per_agent[aid], dtype=torch.long),
-                    "response_masks": torch.tensor(response_masks_per_agent[aid], dtype=torch.long),
-                    "trajectory_reward": trajectory.reward,
+        
+        await loop.run_in_executor(self.executor, env.close)
+
+        if mode == "Text":
+            return self.agents[idx][0].trajectory
+        elif mode == "Token":
+            # Determine which engines to include based on truncation
+            # If any engine truncated, only include that engine
+            # If no truncation, include all engines
+            truncated_engine = None
+            for engine_id in range(self.n_rollout_engines):
+                if termination_reason[engine_id] == "TRUNCATION":
+                    truncated_engine = engine_id
+                    break
+            
+            engines_result = {}
+            for engine_id in range(self.n_rollout_engines):
+                # Skip this engine if another engine truncated
+                if truncated_engine is not None and engine_id != truncated_engine:
+                    continue
+                    
+                agent = self.agents[idx][engine_id]
+                engines_result[engine_id] = {
+                    "prompt_tokens": torch.tensor(prompt_tokens[engine_id], dtype=torch.long),
+                    "response_tokens": torch.tensor(response_tokens[engine_id], dtype=torch.long),
+                    "response_masks": torch.tensor(response_masks[engine_id], dtype=torch.long),
+                    "trajectory_reward": agent.trajectory.reward,
                     "chat_completions": agent.chat_completions,
                     "metrics": {
-                        "steps": len(trajectory.steps),
-                        "reward_time": reward_time,
-                        "env_time": env_time,
-                        "llm_time": llm_time,
+                        "steps": len(agent.trajectory.steps),
+                        "reward_time": reward_time[engine_id],
+                        "env_time": env_time[engine_id],
+                        "llm_time": llm_time[engine_id],
                         "total_time": total_time,
                     },
                 }
-                agent_level_result[aid] = token_result
-            elif mode == "Conversation":
-                agent_level_result[aid] = agent.chat_completions
-            elif mode == "Step":
-                steps_result = {
-                    "steps": episode_steps,
-                    "trajectory_reward": trajectory.reward,
-                    "mc_returns": [step.mc_return for step in trajectory.steps][: len(episode_steps)],
+            token_result = {
+                "idx": env.idx,
+                "agent_level_result": engines_result,
+            }
+            return token_result
+        elif mode == "Conversation":
+            return self.agents[idx][0].chat_completions
+        elif mode == "Step":
+            engines_step_result = {}
+            for engine_id in range(self.n_rollout_engines):
+                agent = self.agents[idx][engine_id]
+                engines_step_result[engine_id] = {
+                    "steps": episode_steps[engine_id],
+                    "trajectory_reward": agent.trajectory.reward,
+                    "mc_returns": [step.mc_return for step in agent.trajectory.steps][: len(episode_steps[engine_id])],
                 }
-                agent_level_result[aid] = steps_result
-        
-        # Return structured result with idx and agent_level_result
-        return {
-            "idx": idx,
-            "agent_level_result": agent_level_result
-        }
+            steps_result = {
+                "idx": env.idx,
+                "agent_level_result": engines_step_result,
+            }
+            return steps_result
 
     async def run_agent_trajectory_with_retry(self, idx, application_id, seed=0, mode="Text", **kwargs):
         for _ in range(self.retry_limit):
@@ -426,8 +509,8 @@ class AgentExecutionEngine:
         self.executor = ThreadPoolExecutor(max_workers=max_concurrency)
 
         if self.engine_name == "verl":
-            for engine in self.rollout_engines:
-                engine.wake_up()
+            for rollout_engine in self.rollout_engines:
+                rollout_engine.wake_up()
 
         async def launch_one_trajectory_task(env_idx: int):
             try:
@@ -461,8 +544,8 @@ class AgentExecutionEngine:
                 raise e
 
         if self.engine_name == "verl":
-            for engine in self.rollout_engines:
-                engine.sleep()
+            for rollout_engine in self.rollout_engines:
+                rollout_engine.sleep()
 
         self.executor.shutdown(wait=False, cancel_futures=True)
 
@@ -502,15 +585,14 @@ class AgentExecutionEngine:
                 index = await index_queue.get()
                 try:
                     self.envs[index] = self.env_class.from_dict({**task, **self.env_args})
-                    # Build a row of agents for this env
-                    self.agents[index] = [self.agent_class(**self.agent_args) for _ in range(self.num_agents)]
-                    for ag in self.agents[index]:
-                        assert isinstance(ag, BaseAgent), "Agent is not initalized or not inheriting from BaseAgent"
-                        ag.trajectory.task = task  # type: ignore
-                    result_dict = await self.run_agent_trajectory_async(index, application_id=task_id)
+                    self.agents[index] = self.agent_class(**self.agent_args)
+                    assert self.agents[index] is not None and isinstance(self.agents[index], BaseAgent), "Agent is not initalized or not inheriting from BaseAgent"
+                    self.agents[index].trajectory.task = task  # type: ignore
+                    res = await self.run_agent_trajectory_async(index, application_id=task_id)
+                    res.task = task
                     completed += 1
                     colorful_print(f"Progress: {completed}/{total} trajectories completed", "cyan")
-                    return task_id, result_dict
+                    return task_id, res
                 finally:
                     # Put the index back in the queue when done
                     await index_queue.put(index)
