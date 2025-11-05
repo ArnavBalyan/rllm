@@ -680,7 +680,7 @@ class AgentPPOTrainer:
                     continue
                 
                 # Transform this agent's trajectories
-                agent_batch_output, agent_metrics = self._transform_agent_trajectories(agent_trajectories)
+                agent_batch_output, agent_metrics = self._transform_agent_trajectories(agent_trajectories, agent_id)
                 agent_level_batch_outputs[agent_id] = (agent_batch_output, agent_metrics)
         
         # Return agent-level outputs as dictionary
@@ -718,15 +718,16 @@ class AgentPPOTrainer:
                     agent_0_steps.append(agent_step)
             
             # Transform the raw trajectories into DataProto format
-            final_gen_batch_output = self._transform_agent_steps(agent_0_steps, uids=uids)
+            final_gen_batch_output = self._transform_agent_steps(agent_0_steps, agent_id=0, uids=uids)
         return final_gen_batch_output
 
-    def _transform_agent_trajectories(self, trajectories: list[dict]):
+    def _transform_agent_trajectories(self, trajectories: list[dict], agent_id: int):
         """
         Helper function to transform a list of trajectories into tokenized DataProto format.
 
         Args:
             trajectories (list of dict): List of trajectories to process.
+            agent_id (int): Agent ID to determine max_response_length.
 
         Returns:
             DataProto: A structured dataset containing input tokens, masks, and rewards.
@@ -789,8 +790,8 @@ class AgentPPOTrainer:
         prompts_batch = pad_sequence_to_length(prompts_batch, max_prompt_length, self.tokenizer.pad_token_id, left_pad=True)
         prompts_batch = prompts_batch[:, -max_prompt_length:]
 
-        # right pad responses
-        max_response_length = self.config.data.max_response_length
+        # right pad responses (use agent-specific max_response_length)
+        max_response_length = self.config.data.max_response_length[agent_id]
         response_batch = torch.nn.utils.rnn.pad_sequence(
             all_response_tokens_list,
             batch_first=True,
@@ -987,7 +988,7 @@ class AgentPPOTrainer:
                 break
             yield item
 
-    def _transform_agent_steps(self, steps: list[dict], uids: np.ndarray):
+    def _transform_agent_steps(self, steps: list[dict], agent_id: int, uids: np.ndarray):
         from verl.utils.torch_functional import pad_sequence_to_length
 
         all_prompts_list = []
@@ -1032,8 +1033,8 @@ class AgentPPOTrainer:
         prompts_batch = pad_sequence_to_length(prompts_batch, max_prompt_length, self.tokenizer.pad_token_id, left_pad=True)
         prompts_batch = prompts_batch[:, -max_prompt_length:]
 
-        # right pad responses
-        max_response_length = self.config.data.max_response_length
+        # right pad responses (use agent-specific max_response_length)
+        max_response_length = self.config.data.max_response_length[agent_id]
         response_batch = torch.nn.utils.rnn.pad_sequence(
             all_responses_list,
             batch_first=True,

@@ -69,7 +69,7 @@ class AgentExecutionEngine:
         self.gamma = gamma
         self.retry_limit = retry_limit
         self.max_steps = max_steps
-        self.max_response_length = [2048, 3072]
+        self.max_response_length = max_response_length
         self.max_prompt_length = max_prompt_length
         self.enforce_max_prompt_length = enforce_max_prompt_length
 

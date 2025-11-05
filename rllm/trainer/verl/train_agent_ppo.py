@@ -218,7 +218,8 @@ class TaskRunner:
                 resource_pool_manager=resource_pool_manager_agent_0,
                 ray_worker_group_cls=ray_worker_group_cls,
                 reward_fn=reward_fn,
-                val_reward_fn=val_reward_fn
+                val_reward_fn=val_reward_fn,
+                engine_id=0,
             )
             
             worker_group_manager_1 = WorkerGroupManager(
@@ -228,7 +229,8 @@ class TaskRunner:
                 resource_pool_manager=resource_pool_manager_agent_1,
                 ray_worker_group_cls=ray_worker_group_cls,
                 reward_fn=reward_fn,
-                val_reward_fn=val_reward_fn
+                val_reward_fn=val_reward_fn,
+                engine_id=1,
             )
 
             trainer = AgentPPOTrainer(

@@ -9,7 +9,8 @@ class WorkerGroupManager(RayPPOTrainer):
     This decouples worker group management from business logic.
     """
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, engine_id, **kwargs):
+        self.engine_id = engine_id
         super().__init__(*args, **kwargs)
         self._initialized = False
     

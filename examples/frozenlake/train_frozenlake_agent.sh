@@ -12,12 +12,13 @@ RLLM_DIR=$(python3 -c "import rllm; import os; print(os.path.dirname(os.path.dir
 
 python3 -m examples.frozenlake.train_frozenlake_agent \
     algorithm.adv_estimator=grpo \
-    data.train_batch_size=256 \
+    data.train_batch_size=384 \
     data.train_files=${RLLM_DIR}/data/rllm-frozenlake/train.parquet \
     data.val_files=${RLLM_DIR}/data/rllm-frozenlake/test.parquet \
     data.val_batch_size=256 \
     data.max_prompt_length=2048 \
-    data.max_response_length=2048 \
+    actor_rollout_ref.rollout.max_model_len=8192 \
+    data.max_response_length='[2048, 2560]' \
     actor_rollout_ref.model.path=Qwen/Qwen3-4B \
     actor_rollout_ref.hybrid_engine=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
